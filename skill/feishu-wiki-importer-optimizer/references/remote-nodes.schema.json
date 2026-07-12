@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/feishu-wiki/remote-nodes.schema.json",
+  "title": "Feishu remote node state",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "space_id", "parent_node_token", "parent_obj_token", "nodes"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "space_id": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]{1,256}$"},
+    "parent_node_token": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]{1,256}$"},
+    "parent_obj_token": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]{1,256}$"},
+    "nodes": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["node_token", "obj_token", "last_seen_at"],
+        "properties": {
+          "node_token": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]{1,256}$"},
+          "obj_token": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]{1,256}$"},
+          "last_seen_at": {"type": ["string", "null"], "format": "date-time"}
+        }
+      }
+    }
+  }
+}

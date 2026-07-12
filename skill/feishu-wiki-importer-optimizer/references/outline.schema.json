@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/feishu-wiki/outline.schema.json",
+  "title": "Document interpretation outline",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "chapters"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "chapters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["chapter_id", "index", "title", "kind", "parent_chapter_id", "source_path"],
+        "properties": {
+          "chapter_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$"
+          },
+          "index": {"type": "integer", "minimum": 0},
+          "title": {"type": "string", "minLength": 1, "maxLength": 500},
+          "kind": {"enum": ["overview", "category", "article", "appendix"]},
+          "parent_chapter_id": {
+            "anyOf": [
+              {"type": "null"},
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$"
+              }
+            ]
+          },
+          "source_path": {
+            "anyOf": [
+              {"type": "null"},
+              {
+                "type": "string",
+                "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+              }
+            ],
+            "description": "Path relative to project source/; absolute paths and parent traversal are forbidden."
+          }
+        }
+      }
+    }
+  }
+}

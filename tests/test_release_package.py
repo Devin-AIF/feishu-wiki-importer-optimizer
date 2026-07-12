@@ -3,6 +3,7 @@
 import importlib.util
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 
@@ -31,6 +32,37 @@ class ReleasePackageTests(unittest.TestCase):
             problems = build_release.scan_stage(stage)
         self.assertTrue(any("forbidden filename" in item for item in problems))
         self.assertTrue(any("non-example JSON" in item for item in problems))
+
+    def test_release_includes_initializer_schemas_and_templates(self):
+        expected = {
+            Path("scripts/init_project.py"),
+            Path("references/project-layout.md"),
+            Path("references/workspace.schema.json"),
+            Path("references/project.schema.json"),
+            Path("references/outline.schema.json"),
+            Path("references/remote-nodes.schema.json"),
+            Path("assets/workspace.template.json"),
+            Path("assets/project.template.json"),
+            Path("assets/outline.template.json"),
+            Path("assets/remote_nodes.template.json"),
+            Path("assets/mermaid_maps.template.json"),
+            Path("assets/uploaded_images.template.json"),
+        }
+        self.assertTrue(expected.issubset(set(build_release.ALLOWED_PATHS)))
+
+    def test_zip_contains_exact_allowlist(self):
+        with tempfile.TemporaryDirectory() as temp:
+            stage = Path(temp) / "stage"
+            destination = Path(temp) / "release.zip"
+            build_release.copy_allowlist(stage)
+            build_release.zip_stage(stage, destination)
+            with zipfile.ZipFile(destination) as archive:
+                actual = {Path(name) for name in archive.namelist()}
+        expected = {
+            Path(build_release.SKILL_NAME) / path
+            for path in build_release.ALLOWED_PATHS
+        }
+        self.assertEqual(actual, expected)
 
 
 if __name__ == "__main__":

@@ -28,12 +28,24 @@ ALLOWED_PATHS = (
     Path("scripts/feishu_doc_tools.py"),
     Path("scripts/feishu_prepare_chapters.py"),
     Path("scripts/feishu_push_chapters.py"),
+    Path("scripts/init_project.py"),
     Path("scripts/requirements.txt"),
     Path("scripts/setup.sh"),
     Path("scripts/doctor.sh"),
     Path("references/runtime-data.md"),
+    Path("references/project-layout.md"),
+    Path("references/workspace.schema.json"),
+    Path("references/project.schema.json"),
+    Path("references/outline.schema.json"),
+    Path("references/remote-nodes.schema.json"),
     Path("assets/chapters_nodes.example.json"),
     Path("assets/mermaid_maps.example.json"),
+    Path("assets/workspace.template.json"),
+    Path("assets/project.template.json"),
+    Path("assets/outline.template.json"),
+    Path("assets/remote_nodes.template.json"),
+    Path("assets/mermaid_maps.template.json"),
+    Path("assets/uploaded_images.template.json"),
 )
 
 FORBIDDEN_PARTS = {
@@ -50,6 +62,7 @@ SENSITIVE_PATTERNS = {
     "aws-key": re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
     "absolute-user-path": re.compile(r"(?:^|[\"'])/Users/[^/]+/|(?:^|[\"'])/home/[^/]+/"),
 }
+SAFE_JSON_SUFFIXES = (".example.json", ".template.json", ".schema.json")
 
 
 def copy_allowlist(stage: Path) -> list[Path]:
@@ -80,7 +93,7 @@ def scan_stage(stage: Path) -> list[str]:
             problems.append(f"forbidden directory in release: {relative}")
         if path.name in FORBIDDEN_NAMES:
             problems.append(f"forbidden filename in release: {relative}")
-        if path.suffix == ".json" and not path.name.endswith(".example.json"):
+        if path.suffix == ".json" and not path.name.endswith(SAFE_JSON_SUFFIXES):
             problems.append(f"non-example JSON in release: {relative}")
         text = path.read_text(encoding="utf-8", errors="replace")
         for label, pattern in SENSITIVE_PATTERNS.items():

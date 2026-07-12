@@ -29,6 +29,7 @@ description: 把本地文档交给 AI 按结构解读（打分 / 脑图 / 待办
 
 | 子命令 | 作用 | 关键参数 |
 |--------|------|----------|
+| `scripts/init_project.py` | 离线创建私有工作区与 `projects/<slug>/` 分层骨架；不访问飞书 | `--workspace/--project/--force` |
 | `create-nodes` | 读私有 `chapters_nodes.json`，批量建档并回写标识；带「已存在节点预扫描去重」幂等 | `--space/--parent/--dry-run` |
 | `update-nav` | 父页面底部挂载飞书原生 `<sub-page-list>` 导航 | `--space/--parent-obj/--parent-node/--dry-run` |
 | `polish` | 一站式排版打磨（见 §7 全部规则 + 白板防丢重绘） | `--workers N/--dry-run` |
@@ -39,8 +40,9 @@ description: 把本地文档交给 AI 按结构解读（打分 / 脑图 / 待办
 
 ## 🔒 发布与私有数据边界
 
-本目录是唯一可发布的 Skill 包。它只能包含 `SKILL.md`、`agents/`、`scripts/`、
-`references/` 和完全合成的 `assets/*.example.json`；严禁把真实章节、课程/书籍原文、
+本目录是唯一可发布的 Skill 包。它只能包含发布白名单中的
+`SKILL.md`、`agents/`、`scripts/`、`references/` 和完全合成的
+`assets/*.example.json` / `assets/*.template.json`；严禁把真实章节、课程/书籍原文、
 图片、评论、`node_token`/`obj_token`、空间标识、`*.local.json`、`*.bak.json`、
 `*.free.json`、快照、缓存、虚拟环境、验证脚本或 Git 元数据带入本目录。
 
@@ -51,9 +53,14 @@ export FEISHU_WIKI_WORKSPACE="/secure/path/feishu-wiki-workspace"
 ```
 
 未设置时，开发仓库优先使用同级 `<repo>.private-workspace`；独立安装时使用用户的
-本地状态目录。私有工作区布局及初始化方式见
-[`references/runtime-data.md`](references/runtime-data.md)。不要用 Finder 压缩或
+本地状态目录。新项目必须使用 `projects/<slug>/` 分层；项目选择、
+权限、Schema 和文件归属见 [`references/project-layout.md`](references/project-layout.md)。
+旧扁平工作区的兼容说明见 [`references/runtime-data.md`](references/runtime-data.md)。不要用 Finder 压缩或
 仓库根目录上传发布；必须使用开发仓库的 allowlist 发布工具生成制品。
+
+> 过渡期提示：分层骨架已可创建，但当前正式 CLI 仍消费旧
+> `mappings/chapters_nodes.json` 数组格式。在迁移器完成前，不得将新
+> `config/outline.json` 直接传给 `--mapping`。
 
 ## ⚖️ 内容授权与最小化
 
@@ -228,6 +235,8 @@ export FEISHU_WIKI_WORKSPACE="/secure/path/feishu-wiki-workspace"
 
 ```bash
 export FEISHU_WIKI_WORKSPACE="/secure/path/feishu-wiki-workspace"
+# 只创建本地分层骨架；不猜测空间 ID 或父节点
+python3 scripts/init_project.py --project default
 bash scripts/setup.sh
 source "$FEISHU_WIKI_WORKSPACE/.venv/bin/activate"
 # 1) 建档（chapters_nodes.json 由阶段一 AI 解读生成，确认 index/title 已就绪即可）
@@ -240,6 +249,9 @@ python3 scripts/feishu_doc_tools.py polish --workers 3
 # 4)（可选）仅补绘丢失的脑图——文章页/总纲页的脑图内容为强制项，见 §脑图规范
 python3 scripts/feishu_doc_tools.py restore-wb --dry-run
 ```
+
+完成本地初始化后，仍必须请用户确认飞书空间、父节点和写入范围，
+再执行任何云端命令。
 
 ## ⚠️ 绝对底线 (Hard Constraints)
 

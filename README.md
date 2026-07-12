@@ -29,7 +29,20 @@
 ```
 
 真实运行数据的目录约定见
-[`runtime-data.md`](skill/feishu-wiki-importer-optimizer/references/runtime-data.md)。
+[`project-layout.md`](skill/feishu-wiki-importer-optimizer/references/project-layout.md)。
+开发者和 AI 修改前还必须阅读 [`AGENTS.md`](AGENTS.md) 与
+[`PROJECT_STRUCTURE.md`](docs/PROJECT_STRUCTURE.md)。
+
+新工作区可先离线初始化：
+
+```bash
+python3 skill/feishu-wiki-importer-optimizer/scripts/init_project.py \
+  --workspace /secure/path/feishu-wiki-workspace \
+  --project default
+```
+
+初始化器不访问飞书，也不猜测空间或父节点。当前旧 CLI 仍读取
+`mappings/chapters_nodes.json`；新 `config/outline.json` 暂不能直接传给 `--mapping`。
 
 ## 兼容旧命令
 

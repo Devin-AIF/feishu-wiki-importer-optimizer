@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/feishu-wiki/workspace.schema.json",
+  "title": "Feishu Wiki private workspace",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "default_project"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "default_project": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"
+    }
+  }
+}
