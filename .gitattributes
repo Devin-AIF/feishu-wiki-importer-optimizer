@@ -1,0 +1,16 @@
+# Ensure generated or private operational files are not accidentally exported.
+/.publish-workspace/ export-ignore
+/docs/ export-ignore
+/tests/ export-ignore
+/tools/ export-ignore
+/README.md export-ignore
+/SECURITY.md export-ignore
+/.gitignore export-ignore
+/.gitattributes export-ignore
+/common.py export-ignore
+/feishu_doc_tools.py export-ignore
+/feishu_prepare_chapters.py export-ignore
+/feishu_push_chapters.py export-ignore
+/setup.sh export-ignore
+/doctor.sh export-ignore
+/requirements.txt export-ignore

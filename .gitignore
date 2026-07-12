@@ -1,0 +1,38 @@
+# OS / Python
+.DS_Store
+*.py[cod]
+__pycache__/
+.pytest_cache/
+
+# Build output: only outputs/ is a disposable staging location.
+outputs/
+*-clean-history/
+
+# Runtime data must never be versioned or packed with the Skill.
+.publish-workspace/
+private-workspace/
+*.private-workspace/
+**/.venv/
+**/runtime_backups/
+**/backups/
+**/dryrun_preview/
+**/temp_*_cache/
+**/temp_*_xml/
+uploaded_images.json
+_verify_tmp/
+verify_push.py
+
+# Real Feishu mappings and their accidental variants.
+chapters_nodes*.json
+mermaid_maps*.json
+!skill/feishu-wiki-importer-optimizer/assets/*.example.json
+
+# Copyrighted/private source material and generated working artifacts.
+chapters/
+scratch/
+temp_images/
+images/
+archive/
+
+# Keep only explicitly reviewed test source; never add test caches.
+tests/__pycache__/

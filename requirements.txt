@@ -1,0 +1,2 @@
+# 兼容入口：正式依赖声明随 Skill 一起发布。
+-r skill/feishu-wiki-importer-optimizer/scripts/requirements.txt

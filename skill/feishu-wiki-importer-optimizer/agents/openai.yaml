@@ -1,0 +1,4 @@
+interface:
+  display_name: "飞书知识库导入与排版"
+  short_description: "Safely import and polish documents in Feishu Wiki"
+  default_prompt: "Use $feishu-wiki-importer-optimizer to safely import and polish local documents in a Feishu wiki."
