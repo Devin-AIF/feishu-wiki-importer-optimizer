@@ -36,6 +36,17 @@ class ReleasePackageTests(unittest.TestCase):
     def test_release_includes_initializer_schemas_and_templates(self):
         expected = {
             Path("scripts/init_project.py"),
+            Path("scripts/feishu_wiki.py"),
+            Path("scripts/feishu_wiki/cli.py"),
+            Path("scripts/feishu_wiki/lark_client.py"),
+            Path("scripts/feishu_wiki/paths.py"),
+            Path("scripts/feishu_wiki/prepare.py"),
+            Path("scripts/feishu_wiki/push.py"),
+            Path("scripts/feishu_wiki/service.py"),
+            Path("scripts/feishu_wiki/storage.py"),
+            Path("scripts/feishu_wiki/transforms.py"),
+            Path("scripts/feishu_wiki/whiteboards.py"),
+            Path("scripts/feishu_wiki/writer.py"),
             Path("references/project-layout.md"),
             Path("references/workspace.schema.json"),
             Path("references/project.schema.json"),

@@ -57,7 +57,7 @@ tags: [feishu, wiki, markdown, formatter, automation, rich-text, knowledge-base]
 ## ⚠️ 绝对底线限制 (Hard Constraints)
 【Agent 在执行该技能时绝不可违反的物理铁律】
 1. **富文本嵌套铁律**：加粗与字色必须严格写为 `<b><span text-color="rgb(216,57,49)">...</span></b>`。顺序颠倒或使用不支持的命名色 `red` 会导致格式直接被飞书云端过滤丢弃。
-2. **白板防丢铁律（两阶段）**：`overwrite` 提交前必须剥离 `<whiteboard>` 的 `id` 和 `token`（仅留 `type="mermaid"`）强制云端重分配；`overwrite` 成功后必须再从响应 `new_blocks` 抓取白板 `block_token`，二次调用 `whiteboard +update` 把 Mermaid 源码渲染写入——**只剥离不重渲染会导致网页端画板空白**。该逻辑只能在 `common.py` 唯一实现，全工具共用。
+2. **白板防丢铁律（两阶段）**：`overwrite` 提交前必须剥离 `<whiteboard>` 的 `id` 和 `token`（仅留 `type="mermaid"`）强制云端重分配；`overwrite` 成功后必须再从响应 `new_blocks` 抓取白板 `block_token`，二次调用 `whiteboard +update` 把 Mermaid 源码渲染写入——**只剥离不重渲染会导致网页端画板空白**。该逻辑分别只能在 `feishu_wiki/whiteboards.py` 和 `feishu_wiki/writer.py` 中唯一实现。
 3. **禁用 sup 上标**：飞书 API 不解析 `<sup>` 标签，引用脚注必须使用 `<b><span text-color="rgb(216,57,49)">[数字]</span></b>` 代替。
 4. **标点净化安全边界**：半角→全角仅对「紧邻中文」的标点生效；整体跳过 `whiteboard`/`code`/`pre`/`latex` 标签，避免破坏中英双栏英文原文、公式括号与 Mermaid 源码。
 ```

@@ -25,6 +25,8 @@ import common
 import feishu_doc_tools as tools
 import feishu_prepare_chapters as prepare
 import feishu_push_chapters as push
+from feishu_wiki import lark_client, prepare as prepare_impl, push as push_impl
+from feishu_wiki import whiteboards, writer
 
 
 class MarkdownSafetyTests(unittest.TestCase):
@@ -49,7 +51,7 @@ class MarkdownSafetyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             os.makedirs(os.path.join(temp, "images"))
             Path(os.path.join(temp, "images", "a.png")).write_bytes(b"not-a-real-image")
-            with patch.object(prepare, "upload_image", return_value="file_1") as upload:
+            with patch.object(prepare_impl, "upload_image", return_value="file_1") as upload:
                 rendered = prepare.md_to_html(
                     "![caption](images/a.png)", temp, {}, os.path.join(temp, "cache.json")
                 )
@@ -98,7 +100,7 @@ class TransformSafetyTests(unittest.TestCase):
 
     def test_restore_existing_whiteboard_uses_embedded_source_without_map(self):
         content = '<title>章节</title><whiteboard token="wb1" type="mermaid">graph LR</whiteboard>'
-        with patch.object(common, "api_update_whiteboard", return_value={"ok": True}) as update:
+        with patch.object(lark_client, "api_update_whiteboard", return_value={"ok": True}) as update:
             _, errors = common.refresh_existing_whiteboards(content, {}, "章节")
         self.assertEqual(errors, [])
         update.assert_called_once_with("wb1", "graph LR")
@@ -108,6 +110,9 @@ class WriterSafetyTests(unittest.TestCase):
     def test_tests_load_formal_skill_implementations(self):
         for module in (common, tools, prepare, push):
             self.assertEqual(Path(module.__file__).resolve().parent, FORMAL_SCRIPTS)
+        self.assertIs(common._overwrite_once, writer.overwrite_once)
+        self.assertIs(common.api_update_whiteboard, lark_client.api_update_whiteboard)
+        self.assertIs(common.process_whiteboards, whiteboards.process_whiteboards)
 
     def test_runtime_data_is_outside_publishable_skill(self):
         skill_dir = Path(common.SKILL_DIR).resolve()
@@ -123,6 +128,10 @@ class WriterSafetyTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 common.validate_identifier(invalid)
 
+    def test_run_cmd_rejects_zero_retries(self):
+        with self.assertRaises(ValueError):
+            lark_client.run_cmd(["unused"], retries=0)
+
     def test_writer_keeps_errors_list_contract_and_rolls_back(self):
         original = '<title>旧</title><whiteboard token="old-wb" type="mermaid">graph TD</whiteboard>'
         calls = []
@@ -131,7 +140,7 @@ class WriterSafetyTests(unittest.TestCase):
             calls.append((xml, list(codes)))
             return (["whiteboard failed"], True) if len(calls) == 1 else ([], True)
 
-        with tempfile.TemporaryDirectory() as temp, patch.object(common, "_overwrite_once", side_effect=fake_once):
+        with tempfile.TemporaryDirectory() as temp, patch.object(writer, "overwrite_once", side_effect=fake_once):
             errors = common.overwrite_and_render("doc1", "<title>新</title>", [], temp, original_xml=original)
         self.assertIsInstance(errors, list)
         self.assertIn("original document was restored", " ".join(errors))
@@ -139,13 +148,13 @@ class WriterSafetyTests(unittest.TestCase):
 
     def test_writer_refuses_when_original_whiteboard_cannot_be_restored(self):
         original = '<title>旧</title><whiteboard token="old-wb" type="mermaid"></whiteboard>'
-        with tempfile.TemporaryDirectory() as temp, patch.object(common, "_overwrite_once") as write:
+        with tempfile.TemporaryDirectory() as temp, patch.object(writer, "overwrite_once") as write:
             errors = common.overwrite_and_render("doc1", "<title>新</title>", [], temp, original_xml=original)
         self.assertIn("cannot be restored safely", " ".join(errors))
         write.assert_not_called()
 
     def test_page_overwrite_does_not_retry(self):
-        with tempfile.TemporaryDirectory() as temp, patch.object(common, "run_cmd", side_effect=RuntimeError("timeout")) as run:
+        with tempfile.TemporaryDirectory() as temp, patch.object(lark_client, "run_cmd", side_effect=RuntimeError("timeout")) as run:
             errors, overwritten = common._overwrite_once("doc1", "<title>x</title>", [], temp)
         self.assertFalse(overwritten)
         self.assertEqual(len(errors), 1)
@@ -159,7 +168,7 @@ class WriterSafetyTests(unittest.TestCase):
             calls.append((xml, list(codes)))
             return (["render failed"], True) if len(calls) == 1 else ([], True)
 
-        with tempfile.TemporaryDirectory() as temp, patch.object(common, "_overwrite_once", side_effect=fake_once):
+        with tempfile.TemporaryDirectory() as temp, patch.object(writer, "overwrite_once", side_effect=fake_once):
             errors = common.overwrite_and_render(
                 "doc1", "<title>新</title>", [], temp, original_xml=original,
                 rollback_maps={"章节": "graph TD"}, rollback_title="章节",
@@ -174,8 +183,8 @@ class WriterSafetyTests(unittest.TestCase):
             Path(path).write_text(json.dumps(mapping), encoding="utf-8")
             parser = tools.build_parser()
             args = parser.parse_args(["create-nodes", "--mapping", path, "--space", "s", "--parent", "p"])
-            with patch.object(tools, "api_get_nodes", side_effect=common.NodeScanError("offline")), \
-                 patch.object(tools, "api_create_node") as create:
+            with patch.object(lark_client, "api_get_nodes", side_effect=common.NodeScanError("offline")), \
+                 patch.object(lark_client, "api_create_node") as create:
                 with self.assertRaises(SystemExit) as exited:
                     tools.cmd_create_nodes(args)
             self.assertEqual(exited.exception.code, 2)
@@ -217,7 +226,7 @@ class PushSafetyTests(unittest.TestCase):
             Path(os.path.join(temp, "chapter_0.json")).write_text(
                 json.dumps({"xml": "<title>章节</title>"}), encoding="utf-8"
             )
-            with patch.object(push, "overwrite_and_render") as writer:
+            with patch.object(push_impl, "overwrite_and_render") as writer:
                 rc = push.main(["--json-dir", temp, "--chapters-nodes", mapping_path, "--maps-file", maps_path, "--dry-run"])
         self.assertEqual(rc, 0)
         writer.assert_not_called()

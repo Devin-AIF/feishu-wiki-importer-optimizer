@@ -25,7 +25,8 @@ description: 把本地文档交给 AI 按结构解读（打分 / 脑图 / 待办
 
 ## 🧰 工具清单 (Tools)
 
-本包已整合为**单一命令行** `scripts/feishu_doc_tools.py`（子命令）+ 共享库 `scripts/common.py`，消除原 4 脚本的重复逻辑：
+本包已整合为**单一主命令行** `scripts/feishu_wiki.py`（子命令）。
+共享实现按职责位于 `scripts/feishu_wiki/`，`scripts/common.py` 仅保留旧导入兼容：
 
 | 子命令 | 作用 | 关键参数 |
 |--------|------|----------|
@@ -34,7 +35,10 @@ description: 把本地文档交给 AI 按结构解读（打分 / 脑图 / 待办
 | `update-nav` | 父页面底部挂载飞书原生 `<sub-page-list>` 导航 | `--space/--parent-obj/--parent-node/--dry-run` |
 | `polish` | 一站式排版打磨（见 §7 全部规则 + 白板防丢重绘） | `--workers N/--dry-run` |
 | `restore-wb` | 仅对白板（Mermaid 脑图）防丢重绘 / 缺失补全 | `--workers N/--dry-run` |
-| `scripts/common.py` | 全部共用逻辑：API 封装、白板两阶段写入、清洗、匹配 | — |
+| `prepare` | 将本地 Markdown 合并到已生成的章节 JSON | `--md-dir/--json-dir` |
+| `push` | 将章节 JSON 覆写到已确认的节点 | `--json-dir/--dry-run` |
+| `scripts/feishu_wiki/` | 分层实现：路径/存储、API 封装、富文本、白板、安全覆写 | — |
+| `scripts/common.py` | 旧 `from common import ...` 的兼容导出层 | 待迁移后删除 |
 | 私有 `mermaid_maps.json` | 脑图源码**单一数据源**（键须与飞书页面标题精确匹配） | 不随包发布 |
 | 私有 `chapters_nodes.json` | 章节物理映射数据 | 不随包发布 |
 
@@ -137,7 +141,7 @@ export FEISHU_WIKI_WORKSPACE="/secure/path/feishu-wiki-workspace"
 * **非核心章节脑图免除**：对于致谢（Acknowledgement）、参考文献/注释（Notes/References）等不含核心投资或策略干货的非正文 Leaf 节点，不强制要求生成或渲染脑图。如果这些页面的 Mermaid 语法出现极难解决的转义冲突，应在 XML 中主动剥离整个 `<h2>二、 深度逻辑图示 🎨</h2>` 标题及对应的 `<whiteboard>` 标签，脚本将自动忽略并以 `[WARN]` 形式通过校验，不会阻断打磨。
 
 ### 两阶段写入铁律（防空白画板）
-见 §7.6：`overwrite` 前剥离 `<whiteboard>` 的 `id`/`token`；`overwrite` 成功后从 `new_blocks` 抓取 `whiteboard` 的 `block_token` 并二次 `whiteboard +update` 渲染。此逻辑在 `common.py` 唯一实现，全工具共用。
+见 §7.6：`overwrite` 前剥离 `<whiteboard>` 的 `id`/`token`；`overwrite` 成功后从 `new_blocks` 抓取 `whiteboard` 的 `block_token` 并二次 `whiteboard +update` 渲染。此逻辑在 `feishu_wiki/whiteboards.py` 与 `feishu_wiki/writer.py` 按职责唯一实现。
 
 ## 🎨 排版与富文本铁律 (Layout & Rich-Text Rules)
 
@@ -173,7 +177,7 @@ export FEISHU_WIKI_WORKSPACE="/secure/path/feishu-wiki-workspace"
 ### §7.6 白板（Mermaid 脑图）防丢重绘铁律
 * **覆盖写入前剥离属性**：任何 `overwrite` 提交前必须彻底剥离 `<whiteboard>` 上的 `id` 和 `token`（只留 `<whiteboard type="mermaid">`），强制云端重分配 ID。
 * **覆盖写入后二次渲染**：`overwrite` 成功后，从响应 `new_blocks` 中按序抓取 `block_type == "whiteboard"` 的新 `block_token`，紧接调用 `whiteboard +update --whiteboard-token <token> --input_format mermaid --source - --overwrite` 将 Mermaid 源码经 stdin 渲染写入。未执行此步 → 网页端画板空白。
-* 此两段逻辑在 `common.py` 的 `process_whiteboards()` + `overwrite_and_render()` 中**唯一实现**，全工具共用，杜绝重复实现导致的遗漏。
+* 此两段逻辑分别在 `feishu_wiki/whiteboards.py` 与 `feishu_wiki/writer.py` **唯一实现**，全工具共用，杜绝重复实现导致的遗漏。
 * **Mermaid 字符净化**：节点文本内英文冒号 `:` 与英文括号 `()` 须转全角（或文本加引号），避免破坏解析；禁止 `->`/`=>`/`➡️` 等箭头及 `💡` 等 Emoji 混入节点文本。
 * **着色语义**：🔴 风险/死穴、🔵 核心系统/根节点、🟢 安全/实践/产出、🟡 过渡/核心观点。
 
@@ -240,14 +244,14 @@ python3 scripts/init_project.py --project default
 bash scripts/setup.sh
 source "$FEISHU_WIKI_WORKSPACE/.venv/bin/activate"
 # 1) 建档（chapters_nodes.json 由阶段一 AI 解读生成，确认 index/title 已就绪即可）
-python3 scripts/feishu_doc_tools.py create-nodes --space <SPACE_ID> --parent <PARENT_TOKEN>
+python3 scripts/feishu_wiki.py create-nodes --space <SPACE_ID> --parent <PARENT_TOKEN>
 # 2) 挂载父页面导航
-python3 scripts/feishu_doc_tools.py update-nav --space <SPACE_ID> --parent-obj <OBJ> --parent-node <NODE>
+python3 scripts/feishu_wiki.py update-nav --space <SPACE_ID> --parent-obj <OBJ> --parent-node <NODE>
 # 3) 先 dry-run 预览，确认无误再正式打磨
-python3 scripts/feishu_doc_tools.py polish --dry-run
-python3 scripts/feishu_doc_tools.py polish --workers 3
+python3 scripts/feishu_wiki.py polish --dry-run
+python3 scripts/feishu_wiki.py polish --workers 3
 # 4)（可选）仅补绘丢失的脑图——文章页/总纲页的脑图内容为强制项，见 §脑图规范
-python3 scripts/feishu_doc_tools.py restore-wb --dry-run
+python3 scripts/feishu_wiki.py restore-wb --dry-run
 ```
 
 完成本地初始化后，仍必须请用户确认飞书空间、父节点和写入范围，
@@ -256,7 +260,7 @@ python3 scripts/feishu_doc_tools.py restore-wb --dry-run
 ## ⚠️ 绝对底线 (Hard Constraints)
 
 1. 富文本嵌套铁律（§7.1）。
-2. 白板防丢两阶段（§7.6）—— 全工具唯一实现点 `common.py`。
+2. 白板防丢两阶段（§7.6）—— 唯一实现点为 `feishu_wiki/whiteboards.py` 与 `feishu_wiki/writer.py`。
 3. 禁用 `sup` 上标（§7.5）。
 4. 标点净化安全边界（§7.4）—— 仅含中文文本节点，跳过公式/代码/脑图/URL。
 5. HTML5 原生 details/summary 原文折叠铁律（§7.9）。

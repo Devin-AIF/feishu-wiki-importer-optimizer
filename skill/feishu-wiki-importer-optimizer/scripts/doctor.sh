@@ -71,7 +71,7 @@ fi
 
 # 4) 发布代码文件与私有运行目录齐备
 echo "-- 发布代码文件 --"
-for f in feishu_doc_tools.py common.py requirements.txt; do
+for f in feishu_wiki.py feishu_wiki/cli.py feishu_wiki/writer.py requirements.txt; do
   if [ -f "$SCRIPT_DIR/$f" ]; then
     ok "存在 $f"
   else

@@ -47,8 +47,9 @@ python3 skill/feishu-wiki-importer-optimizer/scripts/init_project.py \
 ## 旧命令退役期
 
 根目录的 `feishu_doc_tools.py`、`feishu_prepare_chapters.py`、
-`feishu_push_chapters.py`、`setup.sh` 和 `doctor.sh` 是已弃用兼容入口，
-实现已迁移到 Skill 的 `scripts/`。它们当前仍会转发旧命令并输出
+`feishu_push_chapters.py`、`setup.sh` 和 `doctor.sh` 是已弃用兼容入口。
+主 CLI 已收敛为 Skill 的 `scripts/feishu_wiki.py`，共享实现已拆分至
+`scripts/feishu_wiki/`。旧入口当前仍会转发命令并输出
 `[DEPRECATED]` 提示，在私有工作区迁移验证完成后删除。
 
 ```bash
@@ -59,9 +60,9 @@ bash skill/feishu-wiki-importer-optimizer/scripts/setup.sh
 export FEISHU_WIKI_WORKSPACE="/secure/path/feishu-wiki-workspace"
 
 # 直接调用正式 Skill CLI
-python3 skill/feishu-wiki-importer-optimizer/scripts/feishu_doc_tools.py \
+python3 skill/feishu-wiki-importer-optimizer/scripts/feishu_wiki.py \
   create-nodes --space <SPACE_ID> --parent <PARENT_NODE>
-python3 skill/feishu-wiki-importer-optimizer/scripts/feishu_doc_tools.py polish --dry-run
+python3 skill/feishu-wiki-importer-optimizer/scripts/feishu_wiki.py polish --dry-run
 ```
 
 如已有自动化仍调用根目录命令，本批修改不会中断它；但应在删除兼容入口前
