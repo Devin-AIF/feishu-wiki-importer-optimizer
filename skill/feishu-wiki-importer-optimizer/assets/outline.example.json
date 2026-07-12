@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "chapters": [
+    {
+      "chapter_id": "chapter-001",
+      "index": 0,
+      "title": "合成示例章节",
+      "kind": "article",
+      "parent_chapter_id": null,
+      "source_path": "chapters/example.md"
+    }
+  ]
+}

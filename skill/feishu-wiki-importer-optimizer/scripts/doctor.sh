@@ -12,6 +12,11 @@ if [ -d "${REPO_ROOT}.private-workspace" ]; then
 fi
 WORKSPACE="${FEISHU_WIKI_WORKSPACE:-$DEFAULT_WORKSPACE}"
 VENV="$WORKSPACE/.venv"
+PROJECT="default"
+if [ -f "$WORKSPACE/workspace.json" ]; then
+  PROJECT=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["default_project"])' "$WORKSPACE/workspace.json" 2>/dev/null || echo "")
+fi
+PROJECT_DIR="$WORKSPACE/projects/$PROJECT"
 PASS=0
 FAIL=0
 
@@ -22,6 +27,7 @@ echo "=================================================="
 echo "  飞书知识库文档工具 · 环境体检 (doctor)"
 echo "  目录: $SCRIPT_DIR"
 echo "  私有运行目录: $WORKSPACE"
+echo "  当前项目: ${PROJECT:-<invalid>}"
 echo "=================================================="
 
 # 1) Python 3.8+
@@ -80,13 +86,21 @@ for f in feishu_wiki.py feishu_wiki/cli.py feishu_wiki/writer.py requirements.tx
 done
 
 echo "-- 私有运行文件 --"
-for f in mappings/chapters_nodes.json mappings/mermaid_maps.json; do
-  if [ -f "$WORKSPACE/$f" ]; then
+for f in config/outline.json state/remote_nodes.json generated/mermaid_maps.json state/uploaded_images.json; do
+  if [ -n "$PROJECT" ] && [ -f "$PROJECT_DIR/$f" ]; then
     ok "存在 $f"
   else
-    bad "缺失 $WORKSPACE/$f （请从受控私有备份复制，或在命令中显式传入 --mapping / --maps）"
+    bad "缺失 $PROJECT_DIR/$f （运行 init_project.py，或从受控私有备份恢复）"
   fi
 done
+
+echo "-- 章节产物与目标绑定（完全离线） --"
+if [ -x "$VENV/bin/python" ] && "$VENV/bin/python" "$SCRIPT_DIR/feishu_wiki.py" \
+  --workspace "$WORKSPACE" --project "$PROJECT" push --dry-run >/dev/null 2>&1; then
+  ok "push dry-run 预检通过（chapter_id/标题绑定完整）"
+else
+  bad "push dry-run 预检未通过 → 运行同命令查看缺失/不匹配章节；未修复前不要正式写入"
+fi
 
 echo "=================================================="
 echo "  结果: $PASS PASS / $FAIL FAIL"

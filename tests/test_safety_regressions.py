@@ -119,8 +119,18 @@ class WriterSafetyTests(unittest.TestCase):
         runtime_dir = Path(common.RUNTIME_DIR).resolve()
         self.assertNotEqual(runtime_dir, skill_dir)
         self.assertNotIn(skill_dir, runtime_dir.parents)
-        self.assertEqual(Path(common.DEFAULT_MAPPING_PATH).parent, runtime_dir / "mappings")
-        self.assertEqual(Path(common.MERMAID_MAPS_PATH).parent, runtime_dir / "mappings")
+        if common.PROJECT_LAYOUT:
+            project_dir = Path(common.PROJECT_DIR)
+            self.assertEqual(
+                Path(common.DEFAULT_MAPPING_PATH), project_dir / "config" / "outline.json"
+            )
+            self.assertEqual(
+                Path(common.MERMAID_MAPS_PATH),
+                project_dir / "generated" / "mermaid_maps.json",
+            )
+        else:
+            self.assertEqual(Path(common.DEFAULT_MAPPING_PATH).parent, runtime_dir / "mappings")
+            self.assertEqual(Path(common.MERMAID_MAPS_PATH).parent, runtime_dir / "mappings")
 
     def test_lark_identifiers_reject_cli_option_shaped_values(self):
         self.assertEqual(common.validate_identifier("Abc_123-xyz"), "Abc_123-xyz")
@@ -141,7 +151,10 @@ class WriterSafetyTests(unittest.TestCase):
             return (["whiteboard failed"], True) if len(calls) == 1 else ([], True)
 
         with tempfile.TemporaryDirectory() as temp, patch.object(writer, "overwrite_once", side_effect=fake_once):
-            errors = common.overwrite_and_render("doc1", "<title>新</title>", [], temp, original_xml=original)
+            errors = common.overwrite_and_render(
+                "doc1", "<title>新</title>", [], temp,
+                original_xml=original, backup_dir=temp,
+            )
         self.assertIsInstance(errors, list)
         self.assertIn("original document was restored", " ".join(errors))
         self.assertEqual(len(calls), 2)
@@ -172,6 +185,7 @@ class WriterSafetyTests(unittest.TestCase):
             errors = common.overwrite_and_render(
                 "doc1", "<title>新</title>", [], temp, original_xml=original,
                 rollback_maps={"章节": "graph TD"}, rollback_title="章节",
+                backup_dir=temp,
             )
         self.assertIn("original document was restored", " ".join(errors))
         self.assertEqual(calls[1][1], ["graph TD"])
@@ -230,6 +244,24 @@ class PushSafetyTests(unittest.TestCase):
                 rc = push.main(["--json-dir", temp, "--chapters-nodes", mapping_path, "--maps-file", maps_path, "--dry-run"])
         self.assertEqual(rc, 0)
         writer.assert_not_called()
+
+    def test_push_plan_rejects_same_index_content_for_another_title(self):
+        with tempfile.TemporaryDirectory() as temp:
+            mapping = [
+                {
+                    "chapter_id": "chapter-001",
+                    "index": 0,
+                    "filename": "not-numbered.md",
+                    "title": "目标章节",
+                    "obj_token": "obj",
+                }
+            ]
+            Path(os.path.join(temp, "chapter_0.json")).write_text(
+                json.dumps({"xml": "<title>另一章节</title>"}), encoding="utf-8"
+            )
+            plan, warnings = push.build_push_plan(mapping, temp)
+        self.assertEqual(plan, [])
+        self.assertTrue(any("安全关联" in warning for warning in warnings))
 
 
 if __name__ == "__main__":

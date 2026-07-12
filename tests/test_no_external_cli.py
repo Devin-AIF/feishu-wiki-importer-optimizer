@@ -21,6 +21,8 @@ class NoExternalCliTests(unittest.TestCase):
                 "-m",
                 "unittest",
                 "tests.test_safety_regressions",
+                "tests.test_project_layout",
+                "tests.test_migrate_workspace",
                 "-q",
             ],
             cwd=ROOT,

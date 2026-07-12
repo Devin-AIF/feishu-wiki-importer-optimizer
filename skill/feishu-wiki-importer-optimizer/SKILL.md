@@ -14,13 +14,13 @@ description: 把本地文档交给 AI 按结构解读（打分 / 脑图 / 待办
 * 需要在飞书 Wiki 目录下批量创建子页面并自动挂载二级导航。
 
 > ⚠️ **范围与角色声明**：本 Skill 是「**解读 → 建档 → 打磨**」整条链路的工具包，但三件事分工不同：
-> - **解读（AI 助手负责）**：按 §页面结构模板把本地文档转成结构化内容，并产出 `chapters_nodes.json`（AI 拆解的章节大纲）与 `mermaid_maps.json`（AI 生成的脑图源码）。这一步由 AI 助手执行，**不在脚本内**；产物只能放入私有运行工作区，不能放入本 Skill。
+> - **解读（AI 助手负责）**：按 §页面结构模板把本地文档转成结构化内容，并产出 `config/outline.json`（大纲，不含 Token）与 `generated/mermaid_maps.json`（键为稳定 `chapter_id`）。这一步由 AI 助手执行，**不在脚本内**；产物只能放入私有运行工作区，不能放入本 Skill。
 > - **建档 + 打磨（本包脚本负责）**：`create-nodes` / `update-nav` 把解读结果落进飞书，`polish` / `restore-wb` 落实排版铁律。**脚本不直接解析 PDF/OCR**，也不自己做「文档理解」；它消费 AI 解读的产物。
 > - 页面正文由 AI 按 §页面结构模板写成飞书 XML，经脚本 `overwrite_and_render`（底层 `lark-cli docs +update --command overwrite`）灌入已建好的节点；`create-nodes` 仅按大纲创建空标题节点并回填 Token，不导入正文（见 §端到端工作流）。
 
 ## 📜 输入输出契约 (Contract & Interface)
 
-* **输入**：私有运行工作区中由 AI 解读阶段产出的 `mappings/chapters_nodes.json`（含 `index`/`title`，建档后回填 `node_token`/`obj_token`）和 `mappings/mermaid_maps.json`；已 `lark-cli auth login` 的会话；空间 ID 与父挂载节点标识。
+* **输入**：私有项目中的 `config/outline.json`、`state/remote_nodes.json` 和 `generated/mermaid_maps.json`；已 `lark-cli auth login` 的会话；经用户确认的空间 ID 与父挂载节点标识。
 * **输出**：云端指定 Wiki 目录下具备原生级联导航、全文重点标红加粗、全景脑图正确渲染的高品质文献智识库页面。
 
 ## 🧰 工具清单 (Tools)
@@ -31,16 +31,17 @@ description: 把本地文档交给 AI 按结构解读（打分 / 脑图 / 待办
 | 子命令 | 作用 | 关键参数 |
 |--------|------|----------|
 | `scripts/init_project.py` | 离线创建私有工作区与 `projects/<slug>/` 分层骨架；不访问飞书 | `--workspace/--project/--force` |
-| `create-nodes` | 读私有 `chapters_nodes.json`，批量建档并回写标识；带「已存在节点预扫描去重」幂等 | `--space/--parent/--dry-run` |
+| `scripts/migrate_workspace.py` | 离线预检/迁移旧扁平工作区；先 checksum，旧目录只归档 | `--workspace/--project/--apply` |
+| `create-nodes` | 合并读取大纲与远端状态，批量建档并只回写 `state/`；带预扫描去重幂等 | `--space/--parent/--dry-run` |
 | `update-nav` | 父页面底部挂载飞书原生 `<sub-page-list>` 导航 | `--space/--parent-obj/--parent-node/--dry-run` |
 | `polish` | 一站式排版打磨（见 §7 全部规则 + 白板防丢重绘） | `--workers N/--dry-run` |
 | `restore-wb` | 仅对白板（Mermaid 脑图）防丢重绘 / 缺失补全 | `--workers N/--dry-run` |
-| `prepare` | 将本地 Markdown 合并到已生成的章节 JSON | `--md-dir/--json-dir` |
-| `push` | 将章节 JSON 覆写到已确认的节点 | `--json-dir/--dry-run` |
+| `prepare` | 将本地 Markdown 合并到已生成的章节 JSON；预检时不上传图片 | `--md-dir/--json-dir/--dry-run` |
+| `push` | 按 `chapter_id`/标题强绑定后覆写已确认节点；预检告警默认整批中止 | `--json-dir/--dry-run/--allow-partial` |
 | `scripts/feishu_wiki/` | 分层实现：路径/存储、API 封装、富文本、白板、安全覆写 | — |
-| `scripts/common.py` | 旧 `from common import ...` 的兼容导出层 | 待迁移后删除 |
-| 私有 `mermaid_maps.json` | 脑图源码**单一数据源**（键须与飞书页面标题精确匹配） | 不随包发布 |
-| 私有 `chapters_nodes.json` | 章节物理映射数据 | 不随包发布 |
+| `scripts/common.py` | 旧 `from common import ...` 的薄兼容导出层；新代码不得依赖 | 仅兼容 |
+| `generated/mermaid_maps.json` | 脑图源码**单一数据源**（键=`chapter_id`） | 不随包发布 |
+| `config/outline.json` + `state/remote_nodes.json` | 章节结构与云端状态物理分离 | 不随包发布 |
 
 ## 🔒 发布与私有数据边界
 
@@ -62,9 +63,8 @@ export FEISHU_WIKI_WORKSPACE="/secure/path/feishu-wiki-workspace"
 旧扁平工作区的兼容说明见 [`references/runtime-data.md`](references/runtime-data.md)。不要用 Finder 压缩或
 仓库根目录上传发布；必须使用开发仓库的 allowlist 发布工具生成制品。
 
-> 过渡期提示：分层骨架已可创建，但当前正式 CLI 仍消费旧
-> `mappings/chapters_nodes.json` 数组格式。在迁移器完成前，不得将新
-> `config/outline.json` 直接传给 `--mapping`。
+旧扁平布局只作显式兼容读取；新任务不得在 `mappings/` 中继续创建配置。
+迁移时先运行 `scripts/migrate_workspace.py` 预检，确认独立备份后才追加 `--apply`。
 
 ## ⚖️ 内容授权与最小化
 
@@ -73,7 +73,7 @@ export FEISHU_WIKI_WORKSPACE="/secure/path/feishu-wiki-workspace"
 示例、日志、测试夹具或公开问题单。处理第三方材料时，只将完成任务所需的最少内容
 写入用户授权的私有飞书空间，并先获得用户对结构和写入范围的确认。
 
-## 🔴 核心元规范 (Four Engineering Meta-Rules)
+## 🔴 核心元规范 (Five Engineering Meta-Rules)
 
 所有执行飞书导入的 Agent / 开发者在架构与工程改动时，必须死守以下四条高维规则（它们优先于下文任何具体条款）：
 
@@ -123,16 +123,16 @@ export FEISHU_WIKI_WORKSPACE="/secure/path/feishu-wiki-workspace"
 | 节点类型 | 是否强制脑图 | 落点 | 说明 |
 |----------|--------------|------|------|
 | **根/索引页 (L0 Root)** | ❌ 不强制 | — | 着陆页，无白板属正常；脚本跳过。 |
-| **总纲总览页 (L1 Overview)** | ✅ 强制 | `<h2>一、 全书思维全景图 📊</h2>` 下的 `<whiteboard type="mermaid">` | 大一统合集脑图；私有 `mermaid_maps.json` 提供源码（键=总纲页精确标题），脚本可防丢重绘 / 缺失补全。 |
+| **总纲总览页 (L1 Overview)** | ✅ 强制 | `<h2>一、 全书思维全景图 📊</h2>` 下的 `<whiteboard type="mermaid">` | 大一统合集脑图；私有 `mermaid_maps.json` 按总纲的 `chapter_id` 提供源码，脚本可防丢重绘 / 缺失补全。 |
 | **二级分类页 (L1 Category)** | ❌ 不强制 | — | 仅主题介绍 + Top3 推荐 + `<sub-page-list>`，无需白板。 |
 | **文章页 (L2 Leaf)** | ✅ 强制 | `<h2>二、 深度逻辑图示 🎨</h2>` 下的 `<whiteboard type="mermaid">` | 单篇思想脉络脑图。脚本会在此标题后自动插入；若文档已有白板则仅重绘。 |
 
 ### 脑图源码供应规则（mermaid_maps.json 单一数据源）
-* 每一篇**文章页**的脑图 Mermaid 源码应存在于 `mermaid_maps.json`，且键须与飞书页面标题能匹配（见 `find_mermaid_key()`）。
+* 每一篇**文章页**的脑图 Mermaid 源码应存在于 `mermaid_maps.json`，键必须为大纲中的稳定 `chapter_id`；读取器仅为旧项目保留标题键兼容。
 * **匹配已支持 Emoji 前缀标题**：真实文章标题形如 `📘 读书笔记 #3：如何开始...`，`find_mermaid_key()` 会从标题中**抽取 `#N` 数字令牌**查表（内容无关，适用于任意文档集）——既规避 `#3` 误命中 `#33` 的子串 Bug，也兼容 `🛡️`/`📈`/`🎯` 等 Emoji 前缀导致的 `startswith` 失效。总纲页则以**精确标题**作为键。
 * 本包仅随附 `assets/mermaid_maps.example.json` 合成示例；生产使用时应在私有工作区按实际文章页补全 `mermaid_maps.json`。
   * 若本地 `.md` 导入时已携带 Mermaid 代码块（推荐做法），白板在导入阶段即生成，`mermaid_maps.json` 仅用于「白板丢失后的缺失补全」；
-  * 若 `.md` 不含 Mermaid、需要从零补全所有文章脑图，则**必须**把全部文章页脑图填入 `mermaid_maps.json`（键=各文章标题中的编号令牌，或整标题）。
+  * 若 `.md` 不含 Mermaid、需要从零补全所有文章脑图，则**必须**把全部文章页脑图填入 `mermaid_maps.json`（键=`chapter_id`）。
 * 若文章页含「深度逻辑图示 / 全景图 / 思维导图 / 脑图」标题但 `mermaid_maps.json` 无对应键 → 脚本告警 `[WARN] ... 该页将无脑图`，需补条目后再跑。
 * 若文章页连脑图章节都缺失 → 脚本告警 `[WARN] 未检测到 <whiteboard> 也未找到含脑图标题的 <h2>`，提示可能为漏章节。
 
@@ -213,23 +213,23 @@ export FEISHU_WIKI_WORKSPACE="/secure/path/feishu-wiki-workspace"
 
 ## 🔰 端到端工作流（0→1 适用场景）
 
-**典型场景**：把用户拥有或已获授权的一批本地 Markdown 文档（位于私有工作区，如 `chapters/*.md`）交给 AI 解读，再批量创建进用户授权的飞书知识库并统一排版。整条链路分三阶段：
+**典型场景**：把用户拥有或已获授权的一批本地 Markdown 文档（位于私有项目 `source/chapters/*.md`）交给 AI 解读，再批量创建进用户授权的飞书知识库并统一排版。整条链路分三阶段：
 
 > **阶段一 · AI 解读（由 AI 助手执行，产出数据文件）**
-> - 读取私有工作区中的 `chapters/*.md`，按 §页面结构模板生成每篇的结构化内容（评分卡 / 金句 / 逻辑图示 / 核心观点 / 行动清单 / 已获授权的原文摘录）。
-> - 产出私有 `mappings/chapters_nodes.json`：AI 拆解章节大纲（含 `index` / `title` / 本地 `filepath`）。
-> - 产出私有 `mappings/mermaid_maps.json`：AI 为文章 / 总纲绘制的脑图 Mermaid 源码（键须与飞书页面标题匹配）。
-> - ⚠️ 这两个文件是 **AI 解读的产物**，不是人工手填的——脚本在阶段二 / 三直接消费它们。
+> - 读取 `source/chapters/*.md`，按 §页面结构模板生成每篇的结构化内容。
+> - 产出 `config/outline.json`：仅含 `chapter_id` / `index` / `title` / `kind` / `parent_chapter_id` / `source_path`。
+> - 产出 `generated/mermaid_maps.json`：键为 `chapter_id`，值为 Mermaid 源码。
+> - `state/remote_nodes.json` 由脚本回写云端标识；AI 不得把 Token 填入大纲。
 
 > **阶段二 · 建档（脚本）**：`create-nodes` 按大纲批量建子页面并回写 Token（幂等去重）；`update-nav` 在父页面挂载原生 `<sub-page-list>` 导航。（若正文已通过脚本 `overwrite_and_render` 先行灌入，则 `create-nodes` 仅做已存在节点复用。）
 
 > **阶段三 · 打磨（脚本）**：`polish` 落实排版铁律（红字标粗 / Emoji 规范 / 全角净化 / H1 剔除 / 白板防丢重绘）；`restore-wb` 仅在该步未覆盖时单独补绘脑图（文章页 / 总纲页的脑图内容本身为强制项，见 §脑图规范）。
 
-私有 `chapters_nodes.json` 字段含义：`filename`=本地文件名、`filepath`=私有本地相对路径（供导入定位）、`title`=飞书页面标题（须与私有 `mermaid_maps.json` 键精确匹配）、`node_token`/`obj_token`=建档后由脚本回填。该文件不得放入发布包。
+`chapter_id` 是大纲、脑图、生成文件与云端状态之间的稳定关联键。标题可修改，不得作唯一主键。
 
 ### ⚠️ 大纲树结构与排序铁律
-* **总纲排序规范 (Index 0)**：总纲页面是用户阅读该知识库 the 导读入口，在大纲侧边栏中**必须且只能排在首位**。在规划 `chapters_nodes.json` 时，总纲页面（Overview）的 `index` 必须声明为 `0` 并放在列表最前面，确保在大批建档时其首先被创建并自然处于侧边栏最顶层。
-* **多层级目录映射 (Multi-level Tree)**：若书籍包含多级结构（如 卷/篇/章），大纲配置文件 `chapters_nodes.json` 中应通过 parent 指示字段（例如 `"parent_title"`）来声明上下级隶属。建档脚本应支持动态检索已建父节点的 `node_token`，将子章节创建到对应的父节点目录下，实现在飞书 Wiki 树状大纲上的**多层级结构自动映射创建**。
+* **总纲排序规范 (Index 0)**：总纲页的 `kind` 为 `overview`，`index` 必须为 `0` 且在列表首位。
+* **多层级目录映射 (Multi-level Tree)**：在 `outline.json` 中用 `parent_chapter_id` 表达层级。当前 `create-nodes` 每次只对一个已确认的父节点执行一批创建；多层结构必须按父节点分批且逐批 dry-run，不得宣称为自动递归建档。
 * **标准三层拓扑与拆解生命周期 (3-Layer Topology & Lifecycle)**：
   - 全书导入硬性推荐使用 3 层树状结构进行建档（L0 根合集介绍页 ➔ L1a/L1b 总纲与二级模块目录页 ➔ L2 单篇详细解读叶子页），以防止侧边栏臃肿杂乱。
   - **知识库拆解与写入生命周期顺序必须为：① 文档介绍（L0 根页填充与子模块 cite 导航）➔ ② 策略总纲（L1a 总纲页脑图与 Top 推荐卡写入）➔ ③ 主题分类（L1b 二级目录建档与 Nav 原生挂载）➔ ④ 逐一拆解（L2 详细结构化正文与个篇脑图灌入及 Polish 打磨）**。这一流程可绝对保障知识库层级结构的合理性和自适应扩展。
@@ -243,11 +243,14 @@ export FEISHU_WIKI_WORKSPACE="/secure/path/feishu-wiki-workspace"
 python3 scripts/init_project.py --project default
 bash scripts/setup.sh
 source "$FEISHU_WIKI_WORKSPACE/.venv/bin/activate"
-# 1) 建档（chapters_nodes.json 由阶段一 AI 解读生成，确认 index/title 已就绪即可）
+# 1) 先预览建档计划；用户确认后才执行正式写入
+python3 scripts/feishu_wiki.py create-nodes --dry-run
 python3 scripts/feishu_wiki.py create-nodes --space <SPACE_ID> --parent <PARENT_TOKEN>
 # 2) 挂载父页面导航
+python3 scripts/feishu_wiki.py update-nav --space <SPACE_ID> --parent-obj <OBJ> --parent-node <NODE> --dry-run
 python3 scripts/feishu_wiki.py update-nav --space <SPACE_ID> --parent-obj <OBJ> --parent-node <NODE>
 # 3) 先 dry-run 预览，确认无误再正式打磨
+python3 scripts/feishu_wiki.py prepare --dry-run
 python3 scripts/feishu_wiki.py polish --dry-run
 python3 scripts/feishu_wiki.py polish --workers 3
 # 4)（可选）仅补绘丢失的脑图——文章页/总纲页的脑图内容为强制项，见 §脑图规范
@@ -288,6 +291,7 @@ python3 scripts/feishu_wiki.py restore-wb --dry-run
 
 * 所有云端写操作内置幂等（预扫描去重 / 跳过已存在）与指数退避重试；单篇失败不中断整批，结尾汇总失败列表。
 * **写入安全约束**：所有文档覆写前必须生成本地 XML 快照；覆写后白板渲染失败时必须尝试回滚。`restore-wb` 对已存在白板只允许局部渲染，不得为了重绘白板而覆写整页。
+* **产物绑定约束**：`push` 必须用 `chapter_id` 或精确 XML `<title>` 证明章节 JSON 归属；仅文件序号相同不得进入写入计划。出现任何预检告警时默认整批中止，只能由用户明确确认后使用 `--allow-partial`。
 * **创建安全约束**：预扫描现存子节点失败时必须中止，不得将异常视为空目录继续创建；节点创建命令不得自动重试，响应不确定时应重新预扫描并复用已存在节点。
 * 本 Skill 的脚本 / 手册 / `mermaid_maps.json` 任何修改，**须先以报告形式提交用户、经确认后再执行**，且执行前备份原文件。**禁止**自动修改版本号、自动重命名、或自动覆盖写回用户目录。
 * 版本历史与逐版经验见 git / 备份目录，不在本文档内以追加段落重复记录。
@@ -308,5 +312,5 @@ python3 scripts/feishu_wiki.py restore-wb --dry-run
 * ⚠️ 即便多文档并发，也建议 `--workers` 不超过 5，避免触发飞书频控（`run_cmd` 已内置指数退避重试兜底）。
 
 ### 3. 多 Agent 协作推荐姿势
-* 每个 Agent 认领**不同章节集合**（各自独立的 `chapters_nodes.json` 子集或不同 Title 区间），分别调用 `polish --workers N`；共享一份 `mermaid_maps.json` 与 `chapters_nodes.json`（只读 Token）。
+* 每个 Agent 认领**不同 `chapter_id` 集合**，分别调用 `polish --workers N`；共享大纲、脑图和远端状态时必须只读，由单一写入者回写状态。
 * 父页面导航 `update-nav` 与总纲页重绘由单一 Agent 串行收口，避免并发写同一父节点。

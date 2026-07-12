@@ -1,4 +1,4 @@
-# Ensure generated or private operational files are not accidentally exported.
+# `git archive` 只用于开发源码快照；Skill 发布仍必须走 allowlist 构建器。
 /.publish-workspace/ export-ignore
 /docs/ export-ignore
 /tests/ export-ignore
@@ -8,10 +8,4 @@
 /SECURITY.md export-ignore
 /.gitignore export-ignore
 /.gitattributes export-ignore
-/common.py export-ignore
-/feishu_doc_tools.py export-ignore
-/feishu_prepare_chapters.py export-ignore
-/feishu_push_chapters.py export-ignore
-/setup.sh export-ignore
-/doctor.sh export-ignore
-/requirements.txt export-ignore
+/outputs/ export-ignore

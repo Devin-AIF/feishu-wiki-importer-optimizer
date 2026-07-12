@@ -32,7 +32,7 @@ PROJECT_DIRECTORIES = (
     "generated/prepared",
     "state",
     "previews",
-    "backups",
+    "backups/runtime",
     "cache",
     "logs",
 )
@@ -277,7 +277,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if backup_root:
         print(f"[OK] 已备份被替换文件: {backup_root}")
     print("[NEXT] 将授权的原始文档放入 source/chapters/，再确认云端空间与父节点。")
-    print("[NOTE] 当前旧 CLI 仍读取 mappings/chapters_nodes.json；请勿将新 outline.json 直接传给 --mapping。")
+    print("[NOTE] 统一 CLI 默认读取 config/outline.json + state/remote_nodes.json，并兼容旧数组映射。")
     return 0
 
 

@@ -9,13 +9,13 @@ import sys
 import time
 from html import escape
 
-from . import lark_client, service, whiteboards, writer
-from .paths import PREVIEW_DIR, TEMP_DIR
+from . import lark_client, paths, service, whiteboards, writer
 from .storage import (
-    atomic_write_json,
-    backup_file,
+    find_mermaid_key,
     load_mermaid_maps,
+    mapping_metadata,
     resolve_mapping,
+    save_mapping_state,
 )
 
 
@@ -26,12 +26,21 @@ def _workflow_module(name):
 
 def cmd_create_nodes(args):
     mapping_path, mapping = resolve_mapping(args.mapping)
+    metadata = mapping_metadata(mapping_path)
     existing = {}
     if args.dry_run:
         space = parent = None
     else:
-        space = args.space or input("请输入飞书知识库空间 ID (space_id): ").strip()
-        parent = args.parent or input("请输入父节点挂载标识符 (parent_node_id): ").strip()
+        space = (
+            args.space
+            or metadata.get("space_id")
+            or input("请输入飞书知识库空间 ID (space_id): ").strip()
+        )
+        parent = (
+            args.parent
+            or metadata.get("parent_node_token")
+            or input("请输入父节点挂载标识符 (parent_node_id): ").strip()
+        )
         if not space or not parent:
             print("Error: space_id 和 parent_node_id 为必填参数。")
             sys.exit(1)
@@ -85,8 +94,12 @@ def cmd_create_nodes(args):
     if args.dry_run:
         print("\n[DRY-RUN] Mapping file untouched.")
     else:
-        backup = backup_file(mapping_path)
-        atomic_write_json(mapping_path, updated)
+        backup = save_mapping_state(
+            mapping_path,
+            updated,
+            space_id=space,
+            parent_node_token=parent,
+        )
         print("\nBatch creation finished. Mapping updated. Backup: %s" % backup)
     return 0
 
@@ -117,10 +130,19 @@ def build_sub_page_xml(mapping, space_id, parent_wiki_node):
 
 
 def cmd_update_nav(args):
-    _, mapping = resolve_mapping(args.mapping)
-    space = args.space or input("space_id: ").strip()
-    parent_obj = args.parent_obj or input("父节点文档 obj_token: ").strip()
-    parent_node = args.parent_node or input("父节点目录 node_token: ").strip()
+    mapping_path, mapping = resolve_mapping(args.mapping)
+    metadata = mapping_metadata(mapping_path)
+    space = args.space or metadata.get("space_id") or input("space_id: ").strip()
+    parent_obj = (
+        args.parent_obj
+        or metadata.get("parent_obj_token")
+        or input("父节点文档 obj_token: ").strip()
+    )
+    parent_node = (
+        args.parent_node
+        or metadata.get("parent_node_token")
+        or input("父节点目录 node_token: ").strip()
+    )
     if not (space and parent_obj and parent_node):
         print("Error: space_id / parent_obj / parent_node are all required.")
         sys.exit(1)
@@ -130,9 +152,16 @@ def cmd_update_nav(args):
         sys.exit(1)
     original_content = output.get("data", {}).get("document", {}).get("content", "")
     maps = load_mermaid_maps(args.maps)
+    parent_map_key = None
+    for item in mapping:
+        if item.get("obj_token") == parent_obj:
+            parent_map_key = find_mermaid_key(
+                item.get("title"), maps, chapter_id=item.get("chapter_id")
+            )
+            break
     try:
         content, original_whiteboards = whiteboards.prepare_document_whiteboards_for_overwrite(
-            original_content, maps=maps
+            original_content, maps=maps, chapter_title=parent_map_key
         )
     except whiteboards.WhiteboardSourceError as exc:
         print("ERROR updating parent document safely: %s" % exc)
@@ -154,8 +183,8 @@ def cmd_update_nav(args):
         )
         print("No nav header found. Mounted at end of document.")
     if args.dry_run:
-        os.makedirs(PREVIEW_DIR, exist_ok=True)
-        preview = os.path.join(PREVIEW_DIR, "dryrun_top_node_preview.xml")
+        os.makedirs(paths.PREVIEW_DIR, exist_ok=True)
+        preview = os.path.join(paths.PREVIEW_DIR, "dryrun_top_node_preview.xml")
         with open(preview, "w", encoding="utf-8") as handle:
             handle.write(updated)
         print("[DRY-RUN] Preview written to: %s" % preview)
@@ -164,9 +193,10 @@ def cmd_update_nav(args):
         parent_obj,
         updated,
         original_whiteboards,
-        TEMP_DIR,
+        paths.TEMP_DIR,
         original_xml=original_content,
         rollback_maps=maps,
+        rollback_title=parent_map_key,
     )
     if errors:
         print("ERROR updating parent document: %s" % errors)
@@ -191,6 +221,7 @@ def process_one(item, mode, cache_dir, xml_temp, dry_run, maps_path=None):
             mode=mode,
             dry_run=dry_run,
             chapter_title=title,
+            chapter_id=item.get("chapter_id"),
             maps_path=maps_path,
         )
         return title if result.get("errors") else None
@@ -201,8 +232,8 @@ def process_one(item, mode, cache_dir, xml_temp, dry_run, maps_path=None):
 
 def run_batch(mode, args, workers=1):
     _, mapping = resolve_mapping(args.mapping)
-    cache_dir = os.path.join(TEMP_DIR, "temp_%s_cache" % mode)
-    xml_temp = os.path.join(TEMP_DIR, "temp_%s_xml" % mode)
+    cache_dir = os.path.join(paths.TEMP_DIR, "temp_%s_cache" % mode)
+    xml_temp = os.path.join(paths.TEMP_DIR, "temp_%s_xml" % mode)
     os.makedirs(cache_dir, exist_ok=True)
     os.makedirs(xml_temp, exist_ok=True)
     mode_label = "LIVE" if not args.dry_run else "DRY-RUN (no cloud writes)"
@@ -237,7 +268,7 @@ def run_batch(mode, args, workers=1):
     if failures:
         print("WARNING: %s node(s) had errors: %s" % (len(failures), failures))
     if args.dry_run:
-        print("Previews written to: %s" % PREVIEW_DIR)
+        print("Previews written to: %s" % paths.PREVIEW_DIR)
     return 1 if failures else 0
 
 
@@ -252,23 +283,31 @@ def cmd_restore_wb(args):
 def cmd_prepare(args):
     module = _workflow_module("feishu_wiki.prepare")
     argv = [
-        "--md-dir", args.md_dir,
-        "--json-dir", args.json_dir,
-        "--chapters-nodes", args.chapters_nodes,
-        "--uploaded-images", args.uploaded_images,
+        "--workspace", paths.RUNTIME_DIR,
+        "--project", paths.PROJECT,
+        "--md-dir", args.md_dir or paths.SOURCE_CHAPTERS_DIR,
+        "--json-dir", args.json_dir or paths.PREPARED_DIR,
+        "--mapping", args.mapping or paths.DEFAULT_MAPPING_PATH,
+        "--uploaded-images", args.uploaded_images or paths.UPLOADED_IMAGES_PATH,
     ]
+    if args.dry_run:
+        argv.append("--dry-run")
     return module.main(argv)
 
 
 def cmd_push(args):
     module = _workflow_module("feishu_wiki.push")
     argv = [
-        "--json-dir", args.json_dir,
-        "--chapters-nodes", args.chapters_nodes,
-        "--maps-file", args.maps_file,
+        "--workspace", paths.RUNTIME_DIR,
+        "--project", paths.PROJECT,
+        "--json-dir", args.json_dir or paths.PREPARED_DIR,
+        "--mapping", args.mapping or paths.DEFAULT_MAPPING_PATH,
+        "--maps-file", args.maps_file or paths.MERMAID_MAPS_PATH,
     ]
     if args.dry_run:
         argv.append("--dry-run")
+    if args.allow_partial:
+        argv.append("--allow-partial")
     return module.main(argv)
 
 
@@ -277,10 +316,12 @@ def build_parser():
         description="飞书知识库文献排版打磨与建档统一工具",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    parser.add_argument("--workspace", help="私有工作区（优先级高于环境变量）")
+    parser.add_argument("--project", help="项目 slug（默认读 workspace.json）")
     subcommands = parser.add_subparsers(dest="command", required=True)
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--mapping", default=None, help="映射文件（默认私有运行目录 mappings/chapters_nodes.json）")
-    common.add_argument("--maps", default=None, help="Mermaid 映射文件（默认私有运行目录 mappings/mermaid_maps.json）")
+    common.add_argument("--mapping", default=None, help="大纲映射（默认项目 config/outline.json + state）")
+    common.add_argument("--maps", default=None, help="Mermaid 映射（默认项目 generated/mermaid_maps.json）")
     common.add_argument("--dry-run", action="store_true", help="只生成预览，不触碰云端")
     command = subcommands.add_parser("create-nodes", parents=[common], help="批量建档（幂等去重）并回写 Token")
     command.add_argument("--space", default=None, help="知识库空间 ID")
@@ -300,22 +341,29 @@ def build_parser():
     command = subcommands.add_parser(
         "prepare", help="将本地 Markdown 合并到已生成的章节 JSON"
     )
-    command.add_argument("--md-dir", required=True, help="本地原稿 Markdown 目录")
-    command.add_argument("--json-dir", required=True, help="临时章节 JSON 目录")
-    command.add_argument("--chapters-nodes", required=True, help="旧章节映射 JSON")
-    command.add_argument("--uploaded-images", required=True, help="图片上传缓存 JSON")
+    command.add_argument("--md-dir", help="原稿目录（默认 source/chapters）")
+    command.add_argument("--json-dir", help="章节 JSON 目录（默认 generated/prepared）")
+    command.add_argument("--mapping", "--chapters-nodes", dest="mapping", help="大纲映射（兼容旧数组）")
+    command.add_argument("--uploaded-images", help="图片上传状态 JSON")
+    command.add_argument("--dry-run", action="store_true", help="只生成本地预览，不上传图片/覆盖 JSON")
     command.set_defaults(func=cmd_prepare)
     command = subcommands.add_parser(
         "push", help="将已准备的章节 JSON 覆写到已确认的飞书节点"
     )
-    command.add_argument("--json-dir", required=True, help="已准备的章节 JSON 目录")
-    command.add_argument("--chapters-nodes", required=True, help="旧章节映射 JSON")
-    command.add_argument("--maps-file", required=True, help="Mermaid 映射 JSON")
+    command.add_argument("--json-dir", help="已准备章节 JSON 目录（默认 generated/prepared）")
+    command.add_argument("--mapping", "--chapters-nodes", dest="mapping", help="大纲映射（兼容旧数组）")
+    command.add_argument("--maps-file", help="Mermaid 映射 JSON")
     command.add_argument("--dry-run", action="store_true", help="只输出计划，不写云端/本地映射")
+    command.add_argument("--allow-partial", action="store_true", help="明确允许跳过预检失败的章节")
     command.set_defaults(func=cmd_push)
     return parser
 
 
 def main(argv=None):
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        paths.configure(args.workspace, args.project)
+    except paths.WorkspacePathError as exc:
+        parser.error(str(exc))
     return args.func(args)

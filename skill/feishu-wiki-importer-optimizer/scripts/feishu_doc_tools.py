@@ -32,7 +32,7 @@ from feishu_wiki.lark_client import (
 
 if __name__ == "__main__":
     sys.stderr.write(
-        "[DEPRECATED] feishu_doc_tools.py 将在迁移完成后删除；"
+        "[DEPRECATED] feishu_doc_tools.py 仅供旧自动化兼容；"
         "请使用 scripts/feishu_wiki.py。\n"
     )
     raise SystemExit(main())

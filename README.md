@@ -24,8 +24,9 @@
 │   └── assets/                            # 仅合成示例
 ├── tests/                                 # 开发期离线测试
 ├── tools/                                 # allowlist 打包与扫描
-├── docs/                                  # 开发/发布说明
-└── <repo>.private-workspace/              # 仓库外私有数据（不发布）
+└── docs/                                  # 开发/发布说明
+
+../<repo>.private-workspace/              # 仓库同级私有数据（不发布）
 ```
 
 真实运行数据的目录约定见
@@ -41,16 +42,15 @@ python3 skill/feishu-wiki-importer-optimizer/scripts/init_project.py \
   --project default
 ```
 
-初始化器不访问飞书，也不猜测空间或父节点。当前旧 CLI 仍读取
-`mappings/chapters_nodes.json`；新 `config/outline.json` 暂不能直接传给 `--mapping`。
+初始化器不访问飞书，也不猜测空间或父节点。正式 CLI 默认合并读取
+`config/outline.json` 与 `state/remote_nodes.json`，仍可通过 `--mapping`
+显式读取旧 `chapters_nodes.json` 数组。
 
-## 旧命令退役期
+## 统一命令与工作区
 
-根目录的 `feishu_doc_tools.py`、`feishu_prepare_chapters.py`、
-`feishu_push_chapters.py`、`setup.sh` 和 `doctor.sh` 是已弃用兼容入口。
-主 CLI 已收敛为 Skill 的 `scripts/feishu_wiki.py`，共享实现已拆分至
-`scripts/feishu_wiki/`。旧入口当前仍会转发命令并输出
-`[DEPRECATED]` 提示，在私有工作区迁移验证完成后删除。
+仓库根目录不再保留重复的 Python/Shell/依赖入口。主 CLI 是
+`skill/feishu-wiki-importer-optimizer/scripts/feishu_wiki.py`，共享实现按职责位于
+`scripts/feishu_wiki/`。
 
 ```bash
 # 正式入口（推荐）
@@ -61,14 +61,24 @@ export FEISHU_WIKI_WORKSPACE="/secure/path/feishu-wiki-workspace"
 
 # 直接调用正式 Skill CLI
 python3 skill/feishu-wiki-importer-optimizer/scripts/feishu_wiki.py \
-  create-nodes --space <SPACE_ID> --parent <PARENT_NODE>
+  create-nodes --dry-run
 python3 skill/feishu-wiki-importer-optimizer/scripts/feishu_wiki.py polish --dry-run
 ```
 
-如已有自动化仍调用根目录命令，本批修改不会中断它；但应在删除兼容入口前
-将命令路径切换为上述正式位置。
+云端空间、父节点和正式写入范围不会自动猜测。先运行 `--dry-run`，
+由用户确认后再显式传入云端标识执行正式写入。
 
-请先将真实 `chapters_nodes.json` 和 `mermaid_maps.json` 放入私有工作区的 `mappings/`；也可通过 `--mapping` 和 `--maps` 显式指定私有路径。
+旧扁平工作区先只运行预检，确认独立备份后再迁移：
+
+```bash
+python3 skill/feishu-wiki-importer-optimizer/scripts/migrate_workspace.py \
+  --workspace "/secure/path/feishu-wiki-workspace"
+python3 skill/feishu-wiki-importer-optimizer/scripts/migrate_workspace.py \
+  --workspace "/secure/path/feishu-wiki-workspace" --apply
+```
+
+迁移不删除旧数据；它会先 checksum 校验新项目，再将旧根级目录归档到
+`archives/migrations/<timestamp>/legacy-layout/`。
 
 ## 开发与发布检查
 

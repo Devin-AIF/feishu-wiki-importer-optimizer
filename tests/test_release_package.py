@@ -36,6 +36,7 @@ class ReleasePackageTests(unittest.TestCase):
     def test_release_includes_initializer_schemas_and_templates(self):
         expected = {
             Path("scripts/init_project.py"),
+            Path("scripts/migrate_workspace.py"),
             Path("scripts/feishu_wiki.py"),
             Path("scripts/feishu_wiki/cli.py"),
             Path("scripts/feishu_wiki/lark_client.py"),
@@ -55,6 +56,8 @@ class ReleasePackageTests(unittest.TestCase):
             Path("assets/workspace.template.json"),
             Path("assets/project.template.json"),
             Path("assets/outline.template.json"),
+            Path("assets/outline.example.json"),
+            Path("assets/legacy_chapters_nodes.example.json"),
             Path("assets/remote_nodes.template.json"),
             Path("assets/mermaid_maps.template.json"),
             Path("assets/uploaded_images.template.json"),

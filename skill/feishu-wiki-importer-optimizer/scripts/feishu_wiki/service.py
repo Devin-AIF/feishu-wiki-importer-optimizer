@@ -12,8 +12,7 @@ except ImportError:
     sys.stderr.write("\n[ERROR] 缺少依赖 beautifulsoup4。\n\n")
     sys.exit(2)
 
-from . import lark_client, transforms, whiteboards, writer
-from .paths import PREVIEW_DIR
+from . import lark_client, paths, transforms, whiteboards, writer
 from .storage import find_mermaid_key, load_mermaid_maps
 
 
@@ -23,6 +22,7 @@ def process_chapter_file(
     mode="full",
     dry_run=False,
     chapter_title=None,
+    chapter_id=None,
     maps_path=None,
 ):
     summary = {"file": os.path.basename(filepath), "changes": [], "errors": []}
@@ -36,7 +36,7 @@ def process_chapter_file(
     match = re.match(r"^(.*?)(?:_[a-zA-Z0-9]+)?\.json$", filename)
     chapter_title = chapter_title or (match.group(1) if match else filename)
     maps = load_mermaid_maps(maps_path)
-    chapter_key = find_mermaid_key(chapter_title, maps)
+    chapter_key = find_mermaid_key(chapter_title, maps, chapter_id=chapter_id)
     soup = BeautifulSoup(content, "html.parser")
 
     if mode in ("full", "polish"):
@@ -67,8 +67,8 @@ def process_chapter_file(
     processed_xml = str(soup)
 
     if dry_run:
-        os.makedirs(PREVIEW_DIR, exist_ok=True)
-        preview_path = os.path.join(PREVIEW_DIR, "preview_%s.xml" % obj_token)
+        os.makedirs(paths.PREVIEW_DIR, exist_ok=True)
+        preview_path = os.path.join(paths.PREVIEW_DIR, "preview_%s.xml" % obj_token)
         with open(preview_path, "w", encoding="utf-8") as handle:
             handle.write(processed_xml)
         summary["preview"] = preview_path
@@ -78,7 +78,7 @@ def process_chapter_file(
 
     if mode == "whiteboard" and had_whiteboards:
         _, errors = whiteboards.refresh_existing_whiteboards(
-            content, maps, chapter_title
+            content, maps, chapter_key or chapter_title
         )
     elif mode == "whiteboard" and not whiteboard_mermaids:
         errors = [
@@ -92,7 +92,7 @@ def process_chapter_file(
             xml_temp_dir,
             original_xml=content,
             rollback_maps=maps,
-            rollback_title=chapter_title,
+            rollback_title=chapter_key or chapter_title,
         )
     summary["errors"] = errors
     summary["whiteboards"] = len(whiteboard_mermaids)

@@ -34,7 +34,7 @@ python3 scripts/init_project.py --workspace <workspace> --project default
 │   ├── state/remote_nodes.json
 │   ├── state/uploaded_images.json
 │   ├── previews/
-│   ├── backups/
+│   ├── backups/runtime/
 │   ├── cache/
 │   └── logs/
 └── archives/
@@ -43,7 +43,11 @@ python3 scripts/init_project.py --workspace <workspace> --project default
 - `outline.json` 只保存章节结构与相对路径。
 - `remote_nodes.json` 只保存云端节点状态。
 - 使用稳定 `chapter_id` 关联大纲、Mermaid 和云端状态；不以可变的标题作唯一键。
+- `generated/mermaid_maps.json` 以 `chapter_id` 为键；旧标题键只在兼容读取时接受。
 - 目录权限应为 `0700`，配置和状态 JSON 应为 `0600`。
 - 上述整个工作区都是私有运行数据，不得进入 Git 或 Skill 发布包。
 
 字段规则见 `references/*.schema.json`。
+
+旧扁平工作区先运行 `python3 scripts/migrate_workspace.py --workspace <workspace>`
+预检，确认外部备份后再追加 `--apply`。迁移器不访问飞书，旧目录只归档不删除。

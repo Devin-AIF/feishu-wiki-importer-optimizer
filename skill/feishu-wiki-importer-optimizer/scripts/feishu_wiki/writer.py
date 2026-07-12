@@ -8,8 +8,7 @@ import tempfile
 from contextlib import contextmanager
 from datetime import datetime
 
-from . import lark_client, whiteboards
-from .paths import RUNTIME_BACKUP_DIR
+from . import lark_client, paths, whiteboards
 
 
 def overwrite_once(obj_token, processed_xml, whiteboard_mermaids, xml_temp_dir):
@@ -64,7 +63,7 @@ def overwrite_once(obj_token, processed_xml, whiteboard_mermaids, xml_temp_dir):
 def write_runtime_snapshot(obj_token, content, backup_dir=None):
     if content is None:
         return None
-    backup_dir = backup_dir or RUNTIME_BACKUP_DIR
+    backup_dir = backup_dir or paths.RUNTIME_BACKUP_DIR
     os.makedirs(backup_dir, mode=0o700, exist_ok=True)
     try:
         os.chmod(backup_dir, 0o700)

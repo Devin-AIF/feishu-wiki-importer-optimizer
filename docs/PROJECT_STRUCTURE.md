@@ -17,8 +17,8 @@
 ```
 
 `skill/feishu-wiki-importer-optimizer/scripts/` 是业务代码的单一权威位置。
-根目录的同名文件仅为迁移期兼容入口。当前已完成「测试切换到正式代码」
-和「输出弃用提示」；待私有工作区迁移验证后删除根目录兼容入口。
+根目录旧 Python/Shell/依赖入口已在分层工作区迁移验证后删除；
+仓库根目录只保留开发、测试、审计与发布文件。
 
 ### Skill 发布包
 
@@ -57,7 +57,7 @@ feishu-wiki-importer-optimizer/
 │       │   ├── remote_nodes.json
 │       │   └── uploaded_images.json
 │       ├── previews/
-│       ├── backups/
+│       ├── backups/runtime/
 │       ├── cache/
 │       └── logs/
 └── archives/                         # 工作区级历史归档
@@ -109,3 +109,16 @@ python3 skill/feishu-wiki-importer-optimizer/scripts/init_project.py \
 ```
 
 已有文件默认不覆盖。`--force` 仅在需要重建配置骨架时使用，初始化器会先将被替换文件备份到 `<workspace>/archives/init-project/<timestamp>/`。
+
+旧扁平工作区先预检，再显式执行离线迁移：
+
+```bash
+python3 skill/feishu-wiki-importer-optimizer/scripts/migrate_workspace.py \
+  --workspace /secure/path/feishu-wiki-workspace
+python3 skill/feishu-wiki-importer-optimizer/scripts/migrate_workspace.py \
+  --workspace /secure/path/feishu-wiki-workspace --apply
+```
+
+迁移器先复制与 checksum 校验，再切换 `projects/<slug>/`；旧根级目录只移入
+`archives/migrations/<timestamp>/legacy-layout/`，不直接删除。
+旧章节 JSON 还必须通过 `chapter_id` 或精确标题绑定；仅序号相同不构成可写入证据。

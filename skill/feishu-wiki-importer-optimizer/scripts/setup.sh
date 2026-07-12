@@ -12,12 +12,19 @@ WORKSPACE="${FEISHU_WIKI_WORKSPACE:-$DEFAULT_WORKSPACE}"
 VENV="$WORKSPACE/.venv"
 
 echo "== [1/2] 创建私有运行目录与隔离 venv =="
-mkdir -p "$WORKSPACE"/{mappings,runtime_backups,previews,cache}
-chmod 700 "$WORKSPACE" "$WORKSPACE"/{mappings,runtime_backups,previews,cache} 2>/dev/null || true
+if [ ! -f "$WORKSPACE/workspace.json" ]; then
+  python3 "$SCRIPT_DIR/init_project.py" --workspace "$WORKSPACE" --project default
+else
+  PROJECT=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["default_project"])' "$WORKSPACE/workspace.json")
+  if [ ! -f "$WORKSPACE/projects/$PROJECT/project.json" ]; then
+    python3 "$SCRIPT_DIR/init_project.py" --workspace "$WORKSPACE"
+  fi
+fi
+chmod 700 "$WORKSPACE" 2>/dev/null || true
 python3 -m venv "$VENV"
 "$VENV/bin/pip" install --upgrade pip
 "$VENV/bin/pip" install -r "$SCRIPT_DIR/requirements.txt"
-echo "  私有运行目录：$WORKSPACE"
+echo "  私有分层工作区：$WORKSPACE"
 echo "  Done. 激活：source '$VENV/bin/activate'"
 
 echo

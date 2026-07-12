@@ -22,7 +22,7 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.stderr.write(
-        "[DEPRECATED] feishu_push_chapters.py 将在迁移完成后删除；"
+        "[DEPRECATED] feishu_push_chapters.py 仅供旧自动化兼容；"
         "请使用 scripts/feishu_wiki.py push。\n"
     )
     raise SystemExit(main())

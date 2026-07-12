@@ -5,8 +5,8 @@
 ## 单一代码源
 
 - 正式业务代码只能放在 `skill/feishu-wiki-importer-optimizer/scripts/`。
-- 根目录同名 Python/Shell 文件在迁移期只能是薄兼容入口，不得增加业务逻辑。
-- 修复 Bug 时先改正式实现，再运行测试；不得只修根目录兼容文件。
+- 仓库根目录不得再放业务可执行文件；统一入口为 Skill 内的 `scripts/feishu_wiki.py`。
+- 修复 Bug 时只改 Skill 内的正式实现与必要兼容层，再运行测试；不得在仓库根目录恢复副本。
 - ZIP、缓存、快照、备份、预览、日志和生成内容都不是源代码，禁止直接修改后当作代码提交。
 
 ## 运行数据与发布边界
@@ -14,6 +14,7 @@
 - 仓库只保存代码、合成示例、测试和开发文档。
 - 原文、图片、真实飞书资源标识、空间标识、本机绝对路径、评论、快照与中间产物只能存在仓库外的私有工作区。
 - 新任务未指定项目时，默认使用 `<workspace>/projects/default/`；不得把运行文件放回仓库根目录。
+- 新项目使用 `config/outline.json` + `state/remote_nodes.json`；旧 `chapters_nodes.json` 只允许显式兼容读取或经迁移器处理。
 - 只能通过 `python3 tools/build_release.py` 生成发布包。不得直接压缩仓库、Skill 目录或私有工作区。
 - Skill 发布包只能包含白名单中的 `SKILL.md`、`agents/`、`scripts/`、`references/` 和 `assets/`。
 

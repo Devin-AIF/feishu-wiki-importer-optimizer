@@ -22,7 +22,7 @@ my-custom-skill/                        # Skill 包根目录（推荐使用 keba
 └── assets/                             # 仅可公开的模板 / 合成示例
 ```
 
-> **数据隔离**：真实 `chapters_nodes.json`、`mermaid_maps.json`、章节正文、图片、快照、缓存和验证配置必须存放在包外私有工作区。Skill 仅可提供 `*.example.json` 合成示例；脚本必须允许通过参数或环境变量定位私有数据。
+> **数据隔离**：真实 `outline.json`、`remote_nodes.json`、`mermaid_maps.json`、章节正文、图片、快照、缓存和验证配置必须存放在包外私有工作区。Skill 仅可提供 `*.example.json` / `*.template.json` 合成文件；脚本必须允许通过参数或环境变量定位私有数据。
 
 ---
 
@@ -33,10 +33,7 @@ my-custom-skill/                        # Skill 包根目录（推荐使用 keba
 ```markdown
 ---
 name: feishu-wiki-importer-optimizer     # [必填] 全局唯一的 Skill 标识，仅允许英文、数字、中划线
-version: 3.0                             # [必填] 语义化版本号（须与本技能实际 version 保持一致）
 description: 把本地文档交给 AI 按结构解读（打分/脑图/待办/原文）后，批量建档到飞书知识库并统一排版打磨的工具包：并发建档、原生导航挂载、重点 RGB 标红、Emoji 规范、全角标点净化、白板脑图防丢重绘。脚本负责「建档 + 打磨」；文档解读（生成结构化内容与脑图数据源）由 AI 助手按本规范页面模板完成。
-author: Devin
-tags: [feishu, wiki, markdown, formatter, automation, rich-text, knowledge-base] # 搜索分类标签
 ---
 
 # 文档解读 → 飞书知识库 建档与排版技能
@@ -49,8 +46,9 @@ tags: [feishu, wiki, markdown, formatter, automation, rich-text, knowledge-base]
 
 ## 📜 输入输出契约 (Contract & Interface)
 * **输入契约**：
-  1. `chapters_nodes.json` 章节大纲映射（**由 AI 解读阶段产出**，含 `index`/`title`，建档后回填 Token）。
-  2. 空间 ID (`space_id`) 与父挂载节点标识 (`parent_node_id`)。
+  1. `config/outline.json` 章节大纲（**由 AI 解读阶段产出**，不含 Token）。
+  2. `state/remote_nodes.json` 云端节点状态（建档后按 `chapter_id` 回填）。
+  3. 空间 ID (`space_id`) 与父挂载节点标识 (`parent_node_id`)。
 * **输出契约**：
   在云端指定飞书 Wiki 目录下自动生成具备原生级联导航、全文重点标红加粗、全景脑图正确渲染的高品质文献智识库页面。
 

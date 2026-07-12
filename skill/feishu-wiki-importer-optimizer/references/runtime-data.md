@@ -1,4 +1,4 @@
-# 旧扁平私有运行数据（兼容期）
+# 旧扁平私有运行数据（只读兼容与迁移）
 
 > 本布局仅用于兼容现有项目。新项目使用
 > [`project-layout.md`](project-layout.md) 中的 `projects/<slug>/` 分层结构。
@@ -26,8 +26,21 @@
 export FEISHU_WIKI_WORKSPACE="/secure/path/feishu-wiki-workspace"
 ```
 
-可将 `assets/*.example.json` 复制到该工作区作为起点，但示例不能用于真实写入。
 真实 `node_token`、`obj_token`、空间标识和课程/书籍内容均属于私有运行数据。
 
-当前 CLI 仍以本布局的 `mappings/chapters_nodes.json` 为默认输入。不要将新布局的
-`config/outline.json` 直接传给旧 `--mapping`；它们的 Schema 不同。
+正式 CLI 在显式 `--mapping` 时仍能读取旧数组，但默认路径已是新项目的
+`config/outline.json` + `state/remote_nodes.json`。不得继续在旧布局中创建新项目。
+
+迁移步骤：
+
+```bash
+# 只预检，不写文件
+python3 scripts/migrate_workspace.py --workspace <workspace>
+# 已校验独立备份后才执行
+python3 scripts/migrate_workspace.py --workspace <workspace> --apply
+```
+
+迁移器将大纲与云端状态拆分，把 Mermaid 键改为稳定 `chapter_id`，并将
+`.local/.bak/.free` 等历史变体连同旧布局归档。任何无法关联的脑图键都会使迁移在切换前中止。
+旧 `scratch/chapter_*.json` 只有在 `chapter_id` 或 XML `<title>` 与当前大纲一致时才进入
+`generated/prepared/`；无法证明归属的产物仅保留在迁移归档，禁止按数字序号盲推。

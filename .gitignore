@@ -15,10 +15,19 @@ private-workspace/
 **/.venv/
 **/runtime_backups/
 **/backups/
+**/projects/
+**/archives/
+**/generated/prepared/
+**/previews/
+**/logs/
 **/dryrun_preview/
 **/temp_*_cache/
 **/temp_*_xml/
 uploaded_images.json
+workspace.json
+project.json
+outline.json
+remote_nodes.json
 _verify_tmp/
 verify_push.py
 

@@ -22,7 +22,8 @@ from html import escape
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 
-from .storage import atomic_write_json, backup_file
+from . import paths
+from .storage import atomic_write_json, backup_file, resolve_mapping
 
 
 IMAGE_LINE_RE = re.compile(r"^!\[([^\]]*)\]\(([^)]+)\)\s*$")
@@ -126,7 +127,7 @@ def upload_image(img_rel_path, md_dir, cache, cache_path):
         print(f"  Exception during upload: {e}")
     return None
 
-def md_to_html(md_content, md_dir, cache, cache_path):
+def md_to_html(md_content, md_dir, cache, cache_path, allow_upload=True):
     lines = md_content.split("\n")
     html_elements = []
 
@@ -162,7 +163,11 @@ def md_to_html(md_content, md_dir, cache, cache_path):
                 i += 1
 
             try:
-                file_token = upload_image(img_path, md_dir, cache, cache_path)
+                if allow_upload:
+                    file_token = upload_image(img_path, md_dir, cache, cache_path)
+                else:
+                    _resolve_local_image_path(img_path, md_dir)
+                    file_token = None
             except ValueError as exc:
                 file_token = None
                 upload_error = str(exc)
@@ -178,6 +183,11 @@ def md_to_html(md_content, md_dir, cache, cache_path):
                 if caption:
                     attrs.append(f'caption="{_safe_caption(caption)}"')
                 html_elements.append(f'<img {" ".join(attrs)}/>')
+            elif not allow_upload:
+                html_elements.append(
+                    '<p><b>[DRY-RUN 图片占位: %s]</b></p>'
+                    % escape(os.path.basename(img_path))
+                )
             else:
                 html_elements.append(
                     f'<p><b>[图片上传失败: {escape(upload_error or img_path)}]</b></p>'
@@ -260,7 +270,17 @@ def process_paragraph(text, is_quote=False):
     else:
         return f'<p>{text}</p>'
 
-def update_chapter_json(json_path, md_path, logic_reviews, cache, cache_path):
+def update_chapter_json(
+    json_path,
+    md_path,
+    logic_reviews,
+    cache,
+    cache_path,
+    output_path=None,
+    allow_upload=True,
+    chapter_id=None,
+    chapter_title=None,
+):
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -268,7 +288,13 @@ def update_chapter_json(json_path, md_path, logic_reviews, cache, cache_path):
         md_content = f.read()
 
     # 1. 将 MD 全文无损转换为 HTML
-    full_text_html = md_to_html(md_content, os.path.dirname(md_path), cache, cache_path)
+    full_text_html = md_to_html(
+        md_content,
+        os.path.dirname(md_path),
+        cache,
+        cache_path,
+        allow_upload=allow_upload,
+    )
 
     # 2. 用 BeautifulSoup 对 XML 结构重组
     soup = BeautifulSoup(data["xml"], "html.parser")
@@ -338,17 +364,33 @@ def update_chapter_json(json_path, md_path, logic_reviews, cache, cache_path):
 
     # 4. 写回 JSON
     data["xml"] = str(soup)
-    backup_file(json_path)
-    _atomic_save_json(data, json_path)
+    if chapter_id:
+        data["chapter_id"] = chapter_id
+    if chapter_title:
+        data["title"] = chapter_title
+    target_path = output_path or json_path
+    if os.path.abspath(target_path) == os.path.abspath(json_path):
+        backup_file(json_path)
+    _atomic_save_json(data, target_path)
+    return target_path
 
 def build_parser(prog=None):
     parser = argparse.ArgumentParser(
         prog=prog, description="飞书知识库章节本地处理与无损格式化工具"
     )
-    parser.add_argument("--md-dir", required=True, help="本地原稿 Markdown 目录")
-    parser.add_argument("--json-dir", required=True, help="临时章节 JSON 文件存储目录")
-    parser.add_argument("--chapters-nodes", required=True, help="章节大纲 chapters_nodes.json 配置文件路径")
-    parser.add_argument("--uploaded-images", required=True, help="图片上传缓存 JSON 路径")
+    parser.add_argument("--workspace", help="私有工作区")
+    parser.add_argument("--project", help="项目 slug")
+    parser.add_argument("--md-dir", help="本地原稿 Markdown 目录")
+    parser.add_argument("--json-dir", help="已生成章节 JSON 目录")
+    parser.add_argument(
+        "--mapping", "--chapters-nodes", dest="mapping",
+        help="项目 outline.json 或旧 chapters_nodes.json",
+    )
+    parser.add_argument("--uploaded-images", help="图片上传状态 JSON 路径")
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="不上传图片、不覆盖原 JSON，只写 previews/prepare",
+    )
 
     return parser
 
@@ -356,44 +398,73 @@ def build_parser(prog=None):
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
+    try:
+        paths.configure(args.workspace, args.project)
+    except paths.WorkspacePathError as exc:
+        parser.error(str(exc))
+    md_dir = args.md_dir or paths.SOURCE_CHAPTERS_DIR
+    json_dir = args.json_dir or paths.PREPARED_DIR
+    _, mapping = resolve_mapping(args.mapping)
+    uploaded_images = args.uploaded_images or paths.UPLOADED_IMAGES_PATH
 
-    if not os.path.exists(args.chapters_nodes):
-        print(f"Error: 大纲配置文件不存在: {args.chapters_nodes}")
-        sys.exit(1)
-
-    with open(args.chapters_nodes, "r", encoding="utf-8") as f:
-        mapping = json.load(f)
-
-    img_cache = load_json_file(args.uploaded_images)
+    img_cache = load_json_file(uploaded_images)
 
     print("Starting chapters local processing & formatting workflow...")
 
-    # 对大纲中每个非总纲的具体正文章节进行转化处理
-    for idx, item in enumerate(mapping):
-        filename = item["filename"]
-        title = item["title"]
-
-        # 排除总纲节点本身
+    # 先完成所有本地输入预检；任一章节不安全时，在上传图片或改写 JSON 前整批中止。
+    jobs = []
+    issues = []
+    md_root = os.path.realpath(md_dir)
+    json_root = os.path.realpath(json_dir)
+    for item in mapping:
+        filename = item.get("filename") or os.path.basename(
+            str(item.get("source_path") or "")
+        )
+        title = item.get("title")
+        if not filename or not title:
+            issues.append("大纲章节缺少 filename/title")
+            continue
         if filename == "50-总纲.md" or "总纲" in title:
             continue
 
-        md_path = os.path.join(args.md_dir, filename)
-        # 根据大纲中的文件名索引（前缀数字）映射到具体的 chapter_X.json
+        source_path = item.get("source_path") or item.get("filepath") or filename
+        source_path = str(source_path).replace("\\", "/")
+        if source_path.startswith("chapters/"):
+            source_path = source_path[len("chapters/"):]
+        md_path = os.path.realpath(os.path.join(md_root, source_path))
+        if os.path.commonpath([md_root, md_path]) != md_root:
+            issues.append("原稿路径超出 source/chapters: %s" % filename)
+            continue
+
         prefix = filename.split("-")[0]
         try:
             chapter_idx = int(prefix) - 1
         except ValueError:
-            print(f"Skip file with non-standard numeric prefix: {filename}")
+            chapter_idx = item.get("index")
+        if not isinstance(chapter_idx, int) or chapter_idx < 0:
+            issues.append("章节没有可用的非负 index: %s" % filename)
             continue
 
-        json_path = os.path.join(args.json_dir, f"chapter_{chapter_idx}.json")
+        json_name = item.get("json_file") or "chapter_%s.json" % chapter_idx
+        json_path = os.path.realpath(os.path.join(json_root, str(json_name)))
+        if os.path.commonpath([json_root, json_path]) != json_root:
+            issues.append("章节 JSON 路径超出 generated/prepared: %s" % filename)
+            continue
+        if not os.path.isfile(md_path):
+            issues.append("本地 MD 缺失: %s" % filename)
+            continue
+        if not os.path.isfile(json_path):
+            issues.append("章节 JSON 缺失: %s" % os.path.basename(json_path))
+            continue
+        jobs.append((item, filename, title, chapter_idx, md_path, json_path))
 
-        if not os.path.exists(md_path):
-            print(f"Warning: 本地 MD 缺失，跳过: {md_path}")
-            continue
-        if not os.path.exists(json_path):
-            print(f"Warning: 临时 JSON 缺失，跳过: {json_path}")
-            continue
+    if issues:
+        for issue in issues:
+            print("[WARN] %s" % issue)
+        print("ERROR: 本地预检失败，未上传图片、未修改任何章节 JSON。")
+        return 1
+
+    for item, filename, title, chapter_idx, md_path, json_path in jobs:
 
         print(f"\nProcessing [{chapter_idx+1:02d}] {filename} -> chapter_{chapter_idx}.json...")
 
@@ -402,7 +473,27 @@ def main(argv=None):
             "<b>结论边界缺失：</b>本章节内容偏重理论模型推导，在现实操作中，由于交易摩擦损耗、高昂的利息支出及家庭应急现金流的要求，策略敞口边界应更加审慎客观。"
         ])
 
-        update_chapter_json(json_path, md_path, logic_reviews, img_cache, args.uploaded_images)
+        output_path = None
+        if args.dry_run:
+            preview_dir = os.path.join(paths.PREVIEW_DIR, "prepare")
+            os.makedirs(preview_dir, mode=0o700, exist_ok=True)
+            output_path = os.path.join(preview_dir, os.path.basename(json_path))
+        target = update_chapter_json(
+            json_path,
+            md_path,
+            logic_reviews,
+            img_cache,
+            uploaded_images,
+            output_path=output_path,
+            allow_upload=not args.dry_run,
+            chapter_id=item.get("chapter_id"),
+            chapter_title=title,
+        )
+        if args.dry_run:
+            print(f"  [DRY-RUN] Preview: {target}")
 
-    print("\nAll chapters successfully formatted and saved to JSON files!")
+    if args.dry_run:
+        print("\n[DRY-RUN] Preview JSON files generated; source/cache untouched.")
+    else:
+        print("\nAll chapters successfully formatted and saved to JSON files!")
     return 0

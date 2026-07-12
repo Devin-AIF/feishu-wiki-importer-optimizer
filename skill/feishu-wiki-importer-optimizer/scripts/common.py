@@ -12,15 +12,27 @@ from feishu_wiki import whiteboards as _whiteboards
 from feishu_wiki import writer as _writer
 from feishu_wiki.paths import (
     DEFAULT_MAPPING_PATH,
+    LEGACY_MAPPING_PATH,
     MAPPINGS_DIR,
     MERMAID_MAPS_PATH,
+    OUTLINE_PATH,
+    PREPARED_DIR,
     PREVIEW_DIR,
+    PROJECT,
+    PROJECT_DIR,
+    PROJECT_LAYOUT,
+    REMOTE_NODES_PATH,
     REPO_ROOT,
     RUNTIME_BACKUP_DIR,
     RUNTIME_DIR,
     SCRIPT_DIR,
     SKILL_DIR,
+    SOURCE_CHAPTERS_DIR,
+    SOURCE_IMAGES_DIR,
     TEMP_DIR,
+    UPLOADED_IMAGES_PATH,
+    WORKSPACE_CONFIG_PATH,
+    configure as configure_workspace,
     runtime_dir as _runtime_dir,
 )
 
@@ -39,6 +51,8 @@ atomic_write_json = _storage.atomic_write_json
 load_mermaid_maps = _storage.load_mermaid_maps
 find_mermaid_key = _storage.find_mermaid_key
 resolve_mapping = _storage.resolve_mapping
+mapping_metadata = _storage.mapping_metadata
+save_mapping_state = _storage.save_mapping_state
 
 validate_identifier = _lark_client.validate_identifier
 run_cmd = _lark_client.run_cmd
