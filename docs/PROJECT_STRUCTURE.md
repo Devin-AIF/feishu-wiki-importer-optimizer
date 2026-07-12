@@ -16,7 +16,9 @@
 └── docs/                             # 开发文档，不进入 Skill 包
 ```
 
-`skill/feishu-wiki-importer-optimizer/scripts/` 是业务代码的单一权威位置。根目录的同名文件仅为迁移期兼容入口，废弃周期为：测试切换到正式代码 → 输出弃用提示 → 私有工作区迁移验证 → 删除兼容入口。
+`skill/feishu-wiki-importer-optimizer/scripts/` 是业务代码的单一权威位置。
+根目录的同名文件仅为迁移期兼容入口。当前已完成「测试切换到正式代码」
+和「输出弃用提示」；待私有工作区迁移验证后删除根目录兼容入口。
 
 ### Skill 发布包
 

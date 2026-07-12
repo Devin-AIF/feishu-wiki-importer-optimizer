@@ -3,16 +3,23 @@
 运行：.venv/bin/python -m unittest discover -s tests -v
 """
 
-import io
 import json
 import os
+import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from bs4 import BeautifulSoup
+
+# 测试直接加载可发布 Skill 中的正式实现。根目录同名文件只是
+# 迁移期兼容入口，不得成为测试通过所依赖的第二套代码。
+ROOT = Path(__file__).resolve().parents[1]
+FORMAL_SCRIPTS = (
+    ROOT / "skill" / "feishu-wiki-importer-optimizer" / "scripts"
+).resolve()
+sys.path.insert(0, str(FORMAL_SCRIPTS))
 
 import common
 import feishu_doc_tools as tools
@@ -98,6 +105,10 @@ class TransformSafetyTests(unittest.TestCase):
 
 
 class WriterSafetyTests(unittest.TestCase):
+    def test_tests_load_formal_skill_implementations(self):
+        for module in (common, tools, prepare, push):
+            self.assertEqual(Path(module.__file__).resolve().parent, FORMAL_SCRIPTS)
+
     def test_runtime_data_is_outside_publishable_skill(self):
         skill_dir = Path(common.SKILL_DIR).resolve()
         runtime_dir = Path(common.RUNTIME_DIR).resolve()

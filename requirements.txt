@@ -1,2 +1,3 @@
-# 兼容入口：正式依赖声明随 Skill 一起发布。
+# DEPRECATED：根目录仅为迁移期兼容转发。
+# 正式依赖声明位于 Skill scripts/requirements.txt。
 -r skill/feishu-wiki-importer-optimizer/scripts/requirements.txt

@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""兼容入口；实际 CLI 位于 Skill 的 ``scripts/`` 目录。"""
+"""已弃用的兼容入口；实际 CLI 位于 Skill 的 ``scripts/`` 目录。"""
 
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 import runpy
 import sys
 
-
 _IMPL = Path(__file__).parent / "skill" / "feishu-wiki-importer-optimizer" / "scripts" / "feishu_push_chapters.py"
 if __name__ == "__main__":
+    sys.stderr.write(
+        "[DEPRECATED] 根目录 feishu_push_chapters.py 将在迁移完成后删除；"
+        "请使用 Skill scripts 目录中的正式入口。\n"
+    )
     runpy.run_path(str(_IMPL), run_name="__main__")
 else:
     scripts = str(_IMPL.parent)

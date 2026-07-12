@@ -44,22 +44,28 @@ python3 skill/feishu-wiki-importer-optimizer/scripts/init_project.py \
 初始化器不访问飞书，也不猜测空间或父节点。当前旧 CLI 仍读取
 `mappings/chapters_nodes.json`；新 `config/outline.json` 暂不能直接传给 `--mapping`。
 
-## 兼容旧命令
+## 旧命令退役期
 
 根目录的 `feishu_doc_tools.py`、`feishu_prepare_chapters.py`、
-`feishu_push_chapters.py`、`setup.sh` 和 `doctor.sh` 是兼容入口，仍可使用；实现已迁移到 Skill 的 `scripts/`。
+`feishu_push_chapters.py`、`setup.sh` 和 `doctor.sh` 是已弃用兼容入口，
+实现已迁移到 Skill 的 `scripts/`。它们当前仍会转发旧命令并输出
+`[DEPRECATED]` 提示，在私有工作区迁移验证完成后删除。
 
 ```bash
-# 安装私有运行环境；默认使用同级 <repo>.private-workspace/
-bash setup.sh
+# 正式入口（推荐）
+bash skill/feishu-wiki-importer-optimizer/scripts/setup.sh
 
 # 明确选择私有运行目录（建议）
 export FEISHU_WIKI_WORKSPACE="/secure/path/feishu-wiki-workspace"
 
-# 原有命令保持可用
-python3 feishu_doc_tools.py create-nodes --space <SPACE_ID> --parent <PARENT_NODE>
-python3 feishu_doc_tools.py polish --dry-run
+# 直接调用正式 Skill CLI
+python3 skill/feishu-wiki-importer-optimizer/scripts/feishu_doc_tools.py \
+  create-nodes --space <SPACE_ID> --parent <PARENT_NODE>
+python3 skill/feishu-wiki-importer-optimizer/scripts/feishu_doc_tools.py polish --dry-run
 ```
+
+如已有自动化仍调用根目录命令，本批修改不会中断它；但应在删除兼容入口前
+将命令路径切换为上述正式位置。
 
 请先将真实 `chapters_nodes.json` 和 `mermaid_maps.json` 放入私有工作区的 `mappings/`；也可通过 `--mapping` 和 `--maps` 显式指定私有路径。
 
